@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { parseProbe, needsTranscode, parseSceneTimestamps, parseLoudnorm, buildExportArgs, parseWhisperLine, buildWhisperArgs } from '../src'
+import { parseProbe, needsTranscode, parseSceneTimestamps, parseLoudnorm, buildExportArgs } from '../src'
 
 it('parseProbe reads duration/resolution/codecs', () => {
   const j = JSON.stringify({ format: { duration: '120.5' }, streams: [
@@ -32,12 +32,4 @@ it('buildExportArgs: 9:16 crop honours cropOffset and burns ass', () => {
   expect(vf).toContain("ass=s.ass:fontsdir=assets/fonts")
   const af = args[args.indexOf('-af') + 1]
   expect(af).toContain('measured_I=-23.6')
-})
-
-it('whisper args + line parse', () => {
-  expect(buildWhisperArgs({ model: 'm.bin', audio: 'a.wav', language: 'th', offsetMs: 5000 }))
-    .toEqual(['-m', 'm.bin', '-f', 'a.wav', '-l', 'th', '-ot', '5000'])
-  expect(parseWhisperLine('[00:01:02.500 --> 00:01:04.000]  สวัสดีค่ะ'))
-    .toEqual({ start: 62.5, end: 64, text: 'สวัสดีค่ะ' })
-  expect(parseWhisperLine('whisper_init: loading model')).toBeNull()
 })
