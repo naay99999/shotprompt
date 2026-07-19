@@ -12,7 +12,7 @@ function seeded() {
     { videoId: 'v1', start: 20, end: 25, text: 'c' },
     { videoId: 'v1', start: 30, end: 35, text: 'd' },
   ]).run()
-  db.insert(candidates).values({ id: 'c1', videoId: 'v1', start: 8, end: 26, score: 55 }).run()
+  db.insert(candidates).values({ id: 'c1', videoId: 'v1', start: 8, end: 26, score: 55, thumbnailPath: '/thumbs/c1.jpg' }).run()
   return db
 }
 
@@ -21,6 +21,7 @@ describe('createClip', () => {
     const db = seeded()
     const clip = createClip(db, 'v1', { candidateId: 'c1' })
     expect(clip.start).toBe(8); expect(clip.score).toBe(55); expect(clip.candidateId).toBe('c1')
+    expect(clip.thumbnailPath).toBe('/thumbs/c1.jpg')
     const subs = db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, clip.id)).all()
     expect(subs.map(s => s.text)).toEqual(['b', 'c']) // 10-15 & 20-25 overlap [8,26]
   })
@@ -48,5 +49,17 @@ describe('updateClip trim rules', () => {
     const clip = createClip(db, 'v1', { start: 8, end: 26 })
     updateClip(db, clip.id, { start: 12, end: 22 })
     expect(db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, clip.id)).all()).toHaveLength(2)
+  })
+  it('extending a boundary does not duplicate a subtitle row that straddles it', () => {
+    const db = seeded()
+    // straddles clip.start=8: matched both by the initial [8,26] copy and by the
+    // [2,8) range opened up when the start is later extended to 2.
+    db.insert(segments).values({ videoId: 'v1', start: 6, end: 12, text: 'straddle' }).run()
+    const clip = createClip(db, 'v1', { start: 8, end: 26 })
+    updateClip(db, clip.id, { start: 2, end: 26 })
+    const straddleRows = db.select().from(clipSubtitles)
+      .where(eq(clipSubtitles.clipId, clip.id)).all()
+      .filter(s => s.text === 'straddle')
+    expect(straddleRows).toHaveLength(1)
   })
 })

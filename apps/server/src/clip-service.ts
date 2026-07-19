@@ -4,22 +4,27 @@ import { clipSubtitles, clips, candidates, segments, type DB } from '@shotprompt
 function copySubtitles(db: DB, clipId: string, videoId: string, from: number, to: number) {
   const rows = db.select().from(segments)
     .where(and(eq(segments.videoId, videoId), gt(segments.end, from), lt(segments.start, to))).all()
-  if (rows.length)
-    db.insert(clipSubtitles).values(rows.map(r => ({ clipId, start: r.start, end: r.end, text: r.text }))).run()
+  const existing = db.select({ start: clipSubtitles.start, end: clipSubtitles.end })
+    .from(clipSubtitles).where(eq(clipSubtitles.clipId, clipId)).all()
+  const seen = new Set(existing.map(e => `${e.start}:${e.end}`))
+  const fresh = rows.filter(r => !seen.has(`${r.start}:${r.end}`))
+  if (fresh.length)
+    db.insert(clipSubtitles).values(fresh.map(r => ({ clipId, start: r.start, end: r.end, text: r.text }))).run()
 }
 
 export function createClip(db: DB, videoId: string, opts: { candidateId?: string; start?: number; end?: number }) {
   let start: number, end: number, score: number | null = null, candidateId: string | null = null
+  let thumbnailPath: string | null = null
   if (opts.candidateId) {
     const c = db.select().from(candidates).where(eq(candidates.id, opts.candidateId)).get()
     if (!c) throw new Error('candidate not found')
-    start = c.start; end = c.end; score = c.score; candidateId = c.id
+    start = c.start; end = c.end; score = c.score; candidateId = c.id; thumbnailPath = c.thumbnailPath
   } else {
     if (opts.start == null || opts.end == null || opts.start >= opts.end) throw new Error('invalid range')
     start = opts.start; end = opts.end
   }
   const id = crypto.randomUUID()
-  db.insert(clips).values({ id, videoId, candidateId, start, end, score, cropOffset: 0, createdAt: Date.now() }).run()
+  db.insert(clips).values({ id, videoId, candidateId, start, end, score, cropOffset: 0, thumbnailPath, createdAt: Date.now() }).run()
   copySubtitles(db, id, videoId, start, end)
   return db.select().from(clips).where(eq(clips.id, id)).get()!
 }
