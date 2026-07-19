@@ -4,6 +4,7 @@ import type { Ctx } from './context'
 import { systemRoutes } from './routes/system'
 import { videoRoutes } from './routes/videos'
 import { jobRoutes } from './routes/jobs'
+import { clipRoutes } from './routes/clips'
 
 export function createApp(ctx: Ctx) {
   // standardHostname:false disables an Elysia/Bun router optimization that assumes
@@ -16,5 +17,6 @@ export function createApp(ctx: Ctx) {
     .use(systemRoutes(ctx.db))
     .use(videoRoutes(ctx))
     .use(jobRoutes(ctx))
+    .use(clipRoutes(ctx))
 }
 export type App = ReturnType<typeof createApp>
