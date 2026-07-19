@@ -229,15 +229,18 @@ export default function WorkspacePage() {
             ) : (
               <ClipEditor
                 key={selectedClip.id}
-                videoId={id}
                 clip={selectedClip}
                 duration={duration}
                 videoContainerRef={videoContainerRef}
                 onClose={() => setSelectedClipId(null)}
                 onUpdated={refetchAll}
                 onDeleted={() => {
+                  // Deleting a clip cascades to delete its exports server-side, but that
+                  // doesn't emit an export:update event — bump exportsTick so ExportList
+                  // drops any now-orphaned rows for this clip instead of showing stale ones.
                   setSelectedClipId(null)
                   refetchAll()
+                  setExportsTick(t => t + 1)
                 }}
               />
             )}

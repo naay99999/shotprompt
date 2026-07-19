@@ -2,14 +2,13 @@
 
 import { useState } from 'react'
 import { api } from '@/lib/api'
+import { ASPECT_LABEL, type Aspect } from '@/lib/format'
 import type { Clip } from '@/components/clip-strip'
 
-type Aspect = '9:16' | '16:9' | 'original'
-const ASPECTS: { value: Aspect; label: string }[] = [
-  { value: '9:16', label: '9:16' },
-  { value: '16:9', label: '16:9' },
-  { value: 'original', label: 'ต้นฉบับ' },
-]
+const ASPECTS: { value: Aspect; label: string }[] = (Object.keys(ASPECT_LABEL) as Aspect[]).map(value => ({
+  value,
+  label: ASPECT_LABEL[value],
+}))
 
 export function ExportBar({
   clips,
@@ -31,9 +30,12 @@ export function ExportBar({
   async function startExport() {
     if (selCount === 0 || exporting) return
     setExporting(true)
-    await api.exports.post({ clipIds: selectedIds, aspect, burnSubtitles })
-    setExporting(false)
-    onExported()
+    try {
+      await api.exports.post({ clipIds: selectedIds, aspect, burnSubtitles })
+      onExported()
+    } finally {
+      setExporting(false)
+    }
   }
 
   return (

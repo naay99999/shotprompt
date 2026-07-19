@@ -2,22 +2,20 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { api, API_BASE } from '@/lib/api'
-import { fmtTime } from '@/lib/format'
+import { ASPECT_LABEL, fmtTime, type Aspect } from '@/lib/format'
 import { useEvents } from '@/lib/use-events'
 import type { Clip } from '@/components/clip-strip'
 
 type ExportRow = {
   id: string
   clipId: string
-  aspect: '9:16' | '16:9' | 'original'
+  aspect: Aspect
   burnSubtitles: boolean
   status: 'queued' | 'rendering' | 'done' | 'failed'
   path: string | null
   error: string | null
   createdAt: number
 }
-
-const ASPECT_LABEL: Record<ExportRow['aspect'], string> = { '9:16': '9:16', '16:9': '16:9', original: 'ต้นฉบับ' }
 
 export function ExportList({
   videoId,
@@ -51,8 +49,17 @@ export function ExportList({
 
   async function remove(id: string) {
     setDeleting(prev => ({ ...prev, [id]: true }))
-    await api.exports({ id }).delete()
-    setRows(prev => prev.filter(r => r.id !== id))
+    try {
+      const { error } = await api.exports({ id }).delete()
+      if (error) return
+      setRows(prev => prev.filter(r => r.id !== id))
+    } finally {
+      setDeleting(prev => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }
   }
 
   if (rows.length === 0) return null
@@ -122,14 +129,18 @@ export function ExportList({
             )}
             {busy && <div className="flex-none font-mono text-[12px] text-accent">{ex.status === 'queued' ? 'รอคิว…' : 'กำลังแปลง…'}</div>}
 
-            <button
-              type="button"
-              onClick={() => remove(ex.id)}
-              disabled={deleting[ex.id]}
-              className="flex-none rounded-lg border border-line3 px-2.5 py-1.5 text-[12px] text-dim opacity-0 transition-opacity hover:border-err/40 hover:text-err group-hover:opacity-100 disabled:opacity-50"
-            >
-              ลบ
-            </button>
+            {/* Deleting a queued/rendering export races the in-flight job (which reads
+                its row by id) — only allow removing exports that are no longer busy. */}
+            {!busy && (
+              <button
+                type="button"
+                onClick={() => remove(ex.id)}
+                disabled={deleting[ex.id]}
+                className="flex-none rounded-lg border border-line3 px-2.5 py-1.5 text-[12px] text-dim opacity-0 transition-opacity hover:border-err/40 hover:text-err group-hover:opacity-100 disabled:opacity-50"
+              >
+                ลบ
+              </button>
+            )}
           </div>
         )
       })}

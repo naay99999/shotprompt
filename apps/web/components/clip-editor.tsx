@@ -49,7 +49,6 @@ function CropOverlay({ containerRef, offset }: { containerRef: RefObject<HTMLDiv
 }
 
 export function ClipEditor({
-  videoId,
   clip,
   duration,
   videoContainerRef,
@@ -57,7 +56,6 @@ export function ClipEditor({
   onUpdated,
   onDeleted,
 }: {
-  videoId: string
   clip: Clip
   duration: number
   videoContainerRef: RefObject<HTMLDivElement | null>
@@ -77,6 +75,8 @@ export function ClipEditor({
 
   const firstTrimRun = useRef(true)
   const firstCropRun = useRef(true)
+  const pendingTrimRef = useRef<{ start: number; end: number } | null>(null)
+  const pendingCropRef = useRef<number | null>(null)
 
   const maxEnd = duration > 0 ? duration : Infinity
 
@@ -98,7 +98,9 @@ export function ClipEditor({
       firstTrimRun.current = false
       return
     }
+    pendingTrimRef.current = { start, end }
     const t = setTimeout(async () => {
+      pendingTrimRef.current = null
       await api.clips({ id: clip.id }).patch({ start, end })
       refetchSubtitles()
       onUpdated()
@@ -114,13 +116,28 @@ export function ClipEditor({
       firstCropRun.current = false
       return
     }
+    pendingCropRef.current = crop
     const t = setTimeout(async () => {
+      pendingCropRef.current = null
       await api.clips({ id: clip.id }).patch({ cropOffset: crop })
       onUpdated()
     }, 250)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crop])
+
+  // Flush any still-pending debounced PATCH on unmount (e.g. the user edits trim/crop
+  // and immediately switches clips or closes the panel before the debounce fires) —
+  // otherwise clearTimeout above would silently cancel the write and drop the edit.
+  useEffect(() => {
+    return () => {
+      const trim = pendingTrimRef.current
+      if (trim) api.clips({ id: clip.id }).patch(trim).then(onUpdated)
+      const crop = pendingCropRef.current
+      if (crop !== null) api.clips({ id: clip.id }).patch({ cropOffset: crop }).then(onUpdated)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function stepStart(e: React.MouseEvent, sign: 1 | -1) {
     const delta = (e.shiftKey ? 0.1 : 1.0) * sign
