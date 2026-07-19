@@ -71,7 +71,7 @@ Ingest ได้ 2 ทาง (mp4/mov/mkv) + ตัวเลือกเดี�
 
 1. **`normalize`** — ffprobe อ่าน metadata; codec เป็น h264/aac แล้ว → remux เป็น mp4 (เร็ว ไม่ re-encode), ไม่ใช่ (HEVC/mkv) → transcode ได้ `source.mp4` ที่ browser เล่นได้เสมอ **ไฟล์ upload ดิบลบทิ้งหลัง normalize สำเร็จ**
 2. **`extract-audio`** — ffmpeg → `audio.wav` 16kHz mono
-3. **`transcribe`** — ผ่าน interface `TranscriptProvider` (MVP มี implementation เดียว: whisper-cpp) — **stream ผลลง DB ระหว่างรัน**: parse output ของ `whisper-cli` ทีละ segment เขียน `segments` ทันที ได้ 2 อย่าง: (1) progress % บน UI (`เวลาของ segment ล่าสุด / duration`) — step ที่รันเป็นชั่วโมงต้องไม่นิ่งเงียบ (2) crash กลางทางแล้ว retry รันต่อด้วย `--offset-t` จาก timestamp ของ segment สุดท้ายที่เขียนแล้ว ไม่ทิ้งงานที่ transcribe ไปแล้ว (รอยต่อ segment ตรง offset อาจเหลื่อมเล็กน้อย — ยอมรับได้สำหรับ MVP)
+3. **`transcribe`** — ผ่าน interface `TranscriptProvider` (MVP มี implementation เดียว: whisper-cpp) — **stream ผลลง DB ระหว่างรัน**: parse output ของ `whisper-cli` ทีละ segment เขียน `segments` ทันที ได้ 2 อย่าง: (1) progress % บน UI (`เวลาของ segment ล่าสุด / duration`) พร้อมแนบ text ของ segment ล่าสุดใน event เพื่อแสดง live transcript feed — step ที่รันเป็นชั่วโมงต้องไม่นิ่งเงียบ (2) crash กลางทางแล้ว retry รันต่อด้วย `--offset-t` จาก timestamp ของ segment สุดท้ายที่เขียนแล้ว ไม่ทิ้งงานที่ transcribe ไปแล้ว (รอยต่อ segment ตรง offset อาจเหลื่อมเล็กน้อย — ยอมรับได้สำหรับ MVP)
 4. **`detect-scenes`** — port วิธีเดิม: `ffmpeg -vf "select='gt(scene,0.3)',showinfo"` parse `pts_time:` จาก stderr (threshold **0.3** ตามเดิม — ผูกกับค่า `SCENE_BASE_SCORE` ที่ port มา) → เขียน `scenes` ลง DB (persist เพื่อ resume)
 5. **`detect-hooks`** — 4-phase algorithm port จาก repo เก่า **ทั้งชุด constants เดิม**: `SILENCE_GAP=3`, `SCORE_THRESHOLD=40`, `MAX_CLIP_DURATION=90`, `MERGE_GAP=15`, `WINDOW_PAD=5`, `BREATH_PAD=1.5`, `SCENE_BASE_SCORE=35`, `SCENE_MIN_INTERVAL=15`, `SCENE_WINDOW=30` → เขียน **candidates ทั้งหมด**ที่ผ่าน threshold (ไม่ cap จำนวน, ไม่ auto สร้าง clip)
 6. **`thumbnails`** — frame กลางช่วง candidate ละ 1 รูป
@@ -173,16 +173,19 @@ settings        key, value                          -- whisper model size ฯล
 
 Export ซ้ำด้วยค่าใหม่ได้ไม่จำกัด (source.mp4 อยู่เสมอ) — clip เดียว export ได้หลาย aspect
 
-## UI (Next.js, 3 หน้า)
+## UI (Next.js, 4 screens — ตาม Claude Design)
 
-1. **`/` Library** — upload ทีละไฟล์พร้อม progress + รายการวิดีโอ (status, duration, clip count) + retry/delete
+> **Design reference:** `docs/design/ShotPrompt.dc.html` (import จาก claude.ai/design) — โทนมืด `#161513`, accent `#e8823f`, ฟอนต์ **Anuphan** (โหลดผ่าน `next/font` ตอน build ไม่พึ่ง CDN ตอนรัน) ทุกหน้ามี top bar: โลโก้ + nav (คลังวิดีโอ/ตั้งค่า) + status chip "ระบบพร้อม · Metal GPU" (จาก doctor)
+
+1. **`/` Library** — dropzone (เลือกไฟล์ / ใช้ path ในเครื่อง + toggle ภาษา ไทย/EN) + upload progress card + รายการวิดีโอ (duration badge, status chip: processing แสดง % transcribe สด / ready / failed พร้อม error, ปุ่มลองใหม่เมื่อ failed) — **ไม่มีปุ่มลบใน library** (ลบผ่านหน้า Settings ที่เดียว คู่กับ disk usage)
 2. **`/videos/:id` Workspace** — หน้าเดียวจบ:
-   - กำลัง process → ordered step list อัปเดตสดผ่าน SSE
-   - เสร็จแล้ว → ซ้าย: player + timeline แสดงแถบ candidate (สีตาม score) + สร้าง clip จากช่วงที่ลากเอง / ขวา: candidates เรียง score กดเพื่อรับเป็น clip / ล่าง: clips ที่เลือกแล้ว
-   - เลือก clip → panel: trim (ลาก start/end, เห็น transcript segments ประกอบ), crop offset slider พร้อมกรอบ 9:16 ทาบบน preview, subtitle editor (แก้ text/เวลา รายการต่อ segment), export
-   - Export bar: เลือกหลาย clip + aspect + burn sub → สั่งรวดเดียว, สถานะผ่าน SSE, ปุ่มดาวน์โหลดเมื่อเสร็จ
+   - กำลัง process → ordered step list 6 ขั้น + progress % ของ transcribe + **live transcript feed** (segment ล่าสุด ~3 บรรทัดผ่าน SSE) + ปุ่มยกเลิกงาน
+   - เสร็จแล้ว → ซ้าย: player (crop overlay 9:16 ทาบเมื่อเลือก clip) + timeline แถบ candidate สีตาม score คลิก seek ได้ + **ลากช่วงบน timeline เพื่อสร้าง clip เอง** (ลากแล้วขึ้นปุ่มยืนยัน) + แถบ "คลิปของฉัน" (checkbox เลือก export ในตัว) + export bar + รายการ export พร้อม progress/ดาวน์โหลด
+   - ขวา: panel สลับสองโหมด — **Candidates** (เรียง score, ปุ่ม + รับเป็นคลิป, ตัวที่รับแล้วขึ้น ✓ จาง) ↔ **แก้ไขคลิป** (trim ด้วยปุ่ม ‹ › ±1s / Shift ±0.1s, crop offset slider, subtitle editor แก้ text ได้ตรง ๆ และคลิกที่เวลาเพื่อแก้เวลา, ดาวน์โหลด .srt, ลบคลิป)
+   - Export bar: aspect (9:16/16:9/ต้นฉบับ) + toggle ฝัง subtitle + ปุ่ม Export N คลิป, สถานะผ่าน SSE
    - Preview เล่นจาก `/videos/:id/stream` โดย JS บังคับช่วง start/end — ไม่ render ก่อน preview
-3. **`/settings`** — doctor status (รวม acceleration), ดาวน์โหลด/เลือกขนาด model (บอก trade-off เร็ว-แม่น), disk usage ราย video + ลบ export/video เพื่อคืนพื้นที่
+3. **`/settings`** — doctor grid (ffmpeg/ffprobe/whisper-cli/acceleration), model cards **large-v3 / medium** พร้อม trade-off + download progress (API รองรับ model อื่นเช่น tiny สำหรับ dev แต่ UI แสดง 2 ตัว), disk usage ราย video + ลบ video/exports คืนพื้นที่
+4. **`/setup`** — first-run เมื่อ doctor ไม่ผ่าน: เช็คลิสต์ ffmpeg/whisper-cli, คำสั่ง `brew install ffmpeg whisper-cpp` พร้อมปุ่ม copy, ดาวน์โหลด model + progress, ปุ่มตรวจสอบอีกครั้ง → เข้าใช้งาน
 
 ## Testing
 

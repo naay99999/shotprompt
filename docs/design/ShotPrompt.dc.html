@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--accent:#e8823f}
+html,body{margin:0;padding:0;background:#161513}
+body{font-family:'Anuphan',system-ui,sans-serif;color:#edeae5}
+a{color:var(--accent,#e8823f);text-decoration:none}a:hover{color:#f0975c}
+*{box-sizing:border-box}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#2e2c28;border-radius:99px;border:3px solid #161513}::-webkit-scrollbar-track{background:transparent}
+input:focus{outline:none}
+input[type=range]{accent-color:var(--accent,#e8823f)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes slideIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+@keyframes stripe{to{background-position:24px 0}}
+</style>
+</helmet>
+<div style="height:100vh;display:flex;flex-direction:column;overflow:hidden;background:#161513;font-family:'Anuphan',system-ui,sans-serif;color:#edeae5">
+  <div style="height:54px;flex:none;display:flex;align-items:center;gap:20px;padding:0 20px;border-bottom:1px solid #26241f;background:#191816">
+    <div style="display:flex;align-items:center;gap:10px;cursor:pointer" onClick="{{ goLibrary }}">
+      <div style="width:26px;height:26px;border-radius:8px;background:var(--accent,#e8823f);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;padding-left:2px">▶</div>
+      <div style="font-weight:700;font-size:15px;letter-spacing:.2px">ShotPrompt</div>
+    </div>
+    <div style="display:flex;gap:4px">
+      <button onClick="{{ goLibrary }}" style="border:none;cursor:pointer;font-family:inherit;font-size:13.5px;padding:6px 14px;border-radius:8px;background:{{ navLibBg }};color:{{ navLibColor }};transition:background .15s,color .15s" style-hover="color:#edeae5">คลังวิดีโอ</button>
+      <button onClick="{{ goSettings }}" style="border:none;cursor:pointer;font-family:inherit;font-size:13.5px;padding:6px 14px;border-radius:8px;background:{{ navSetBg }};color:{{ navSetColor }};transition:background .15s,color .15s" style-hover="color:#edeae5">ตั้งค่า</button>
+    </div>
+    <div style="flex:1"></div>
+    <div onClick="{{ goSettings }}" style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:5px 12px;border-radius:8px;transition:background .15s" style-hover="background:#23211e">
+      <div style="width:7px;height:7px;border-radius:99px;background:#62b97c;animation:pulse 2.4s ease infinite"></div>
+      <span style="font-size:12.5px;color:#a29c92">ระบบพร้อม · Metal GPU</span>
+    </div>
+    <div style="font-size:11.5px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace">v0.1 · 127.0.0.1</div>
+  </div>
+
+  <sc-if value="{{ isLibrary }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="Library" style="flex:1;overflow-y:auto">
+    <div style="max-width:1020px;margin:0 auto;padding:44px 32px 80px;display:flex;flex-direction:column;gap:28px">
+      <div>
+        <div style="font-size:25px;font-weight:700">คลังวิดีโอ</div>
+        <div style="font-size:13.5px;color:#a29c92;margin-top:4px">{{ videoCountText }} · ทุกอย่างอยู่ในเครื่องของคุณ ไม่มีอะไรออกสู่อินเทอร์เน็ต</div>
+      </div>
+      <sc-if value="{{ notUploading }}" hint-placeholder-val="{{ true }}">
+      <div style="border:1.5px dashed #34312b;border-radius:16px;padding:34px;display:flex;flex-direction:column;align-items:center;gap:12px;transition:border-color .2s,background .2s" style-hover="border-color:#4a4438;background:#1a1917">
+        <div style="width:46px;height:46px;border-radius:99px;background:color-mix(in oklab,var(--accent,#e8823f) 14%,transparent);color:var(--accent,#e8823f);display:flex;align-items:center;justify-content:center;font-size:19px">↑</div>
+        <div style="font-size:15px;font-weight:600">ลากไฟล์วิดีโอมาวางที่นี่</div>
+        <div style="font-size:12.5px;color:#6f6a61;margin-top:-6px">รองรับ mp4 · mov · mkv — ไฟล์ใหญ่แนะนำใช้ path ในเครื่อง</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+          <div style="display:flex;background:#1d1b19;border:1px solid #2b2925;border-radius:9px;padding:3px;gap:2px">
+            <button onClick="{{ langTh }}" style="border:none;cursor:pointer;font-family:inherit;font-size:12.5px;padding:4px 12px;border-radius:6px;background:{{ langThBg }};color:{{ langThColor }};transition:all .15s">ไทย</button>
+            <button onClick="{{ langEn }}" style="border:none;cursor:pointer;font-family:inherit;font-size:12.5px;padding:4px 12px;border-radius:6px;background:{{ langEnBg }};color:{{ langEnColor }};transition:all .15s">EN</button>
+          </div>
+          <button onClick="{{ startUpload }}" style="border:none;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;padding:9px 18px;border-radius:9px;background:var(--accent,#e8823f);color:#1a120b;transition:filter .15s,transform .1s" style-hover="filter:brightness(1.1)" style-active="transform:scale(.97)">เลือกไฟล์</button>
+          <button onClick="{{ startUpload }}" style="cursor:pointer;font-family:inherit;font-size:13.5px;padding:9px 16px;border-radius:9px;background:transparent;border:1px solid #34312b;color:#c9c4bb;transition:border-color .15s,color .15s" style-hover="border-color:#4a4438;color:#edeae5">ใช้ path ในเครื่อง</button>
+        </div>
+      </div>
+      </sc-if>
+      <sc-if value="{{ uploading }}" hint-placeholder-val="{{ false }}">
+      <div style="border:1.5px solid #34312b;border-radius:16px;padding:26px 30px;display:flex;flex-direction:column;gap:12px;animation:fadeUp .25s ease">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:14px;font-weight:600">ไลฟ์กระเป๋าแบรนด์เนม.mp4</div>
+          <div style="font-size:12.5px;color:var(--accent,#e8823f);font-family:ui-monospace,Menlo,monospace">{{ uploadPctText }}</div>
+        </div>
+        <div style="height:6px;border-radius:99px;background:#26241f;overflow:hidden">
+          <div style="height:100%;border-radius:99px;background:var(--accent,#e8823f);width:{{ uploadPct }}%;transition:width .2s"></div>
+        </div>
+        <div style="font-size:12px;color:#6f6a61">กำลังอัปโหลด… เสร็จแล้วจะเข้าคิวประมวลผลอัตโนมัติ (ภาษา: {{ uploadLangLabel }})</div>
+      </div>
+      </sc-if>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ videosR }}" as="v" hint-placeholder-count="3">
+          <div onClick="{{ v.onOpen }}" style="display:flex;align-items:center;gap:16px;background:#1d1b19;border:1px solid #26241f;border-radius:13px;padding:13px 16px;cursor:{{ v.cursor }};transition:background .15s,transform .15s,border-color .15s" style-hover="background:#22201d;border-color:#302d27">
+            <div style="width:112px;height:63px;flex:none;border-radius:8px;background:{{ v.grad }};position:relative;overflow:hidden">
+              <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0 10px,transparent 10px 20px)"></div>
+              <div style="position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.65);border-radius:5px;padding:1px 6px;font-size:10.5px;font-family:ui-monospace,Menlo,monospace;color:#c9c4bb">{{ v.durLabel }}</div>
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ v.name }}</div>
+              <div style="font-size:12.5px;color:#8a847a;margin-top:3px">{{ v.meta }}</div>
+            </div>
+            <div style="flex:none;font-size:12.5px;color:#8a847a">{{ v.clipsText }}</div>
+            <div style="flex:none;display:flex;align-items:center;gap:7px;padding:5px 12px;border-radius:99px;background:{{ v.chipBg }};color:{{ v.chipColor }};font-size:12.5px;font-weight:500">
+              <sc-if value="{{ v.isProcessing }}" hint-placeholder-val="{{ false }}">
+                <div style="width:11px;height:11px;border-radius:99px;border:2px solid color-mix(in oklab,var(--accent,#e8823f) 30%,transparent);border-top-color:var(--accent,#e8823f);animation:spin .8s linear infinite"></div>
+              </sc-if>
+              <sc-if value="{{ v.isReady }}" hint-placeholder-val="{{ false }}"><span style="font-size:11px">✓</span></sc-if>
+              <span>{{ v.chipText }}</span>
+            </div>
+            <sc-if value="{{ v.isFailed }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ v.onRetry }}" style="cursor:pointer;font-family:inherit;font-size:12.5px;padding:6px 13px;border-radius:8px;background:transparent;border:1px solid #34312b;color:#c9c4bb;flex:none;transition:border-color .15s" style-hover="border-color:#4a4438">ลองใหม่</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Workspace" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div style="flex:none;display:flex;align-items:center;gap:14px;padding:12px 22px;border-bottom:1px solid #26241f">
+      <button onClick="{{ goLibrary }}" style="cursor:pointer;font-family:inherit;font-size:13px;padding:6px 12px;border-radius:8px;background:transparent;border:none;color:#a29c92;transition:background .15s,color .15s" style-hover="background:#23211e;color:#edeae5">← คลังวิดีโอ</button>
+      <div style="width:1px;height:18px;background:#2b2925"></div>
+      <div style="font-size:14.5px;font-weight:600">{{ wsName }}</div>
+      <div style="font-size:12px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace">{{ wsDur }}</div>
+      <div style="flex:1"></div>
+      <sc-if value="{{ wsProcessing }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ cancelJob }}" style="cursor:pointer;font-family:inherit;font-size:12.5px;padding:7px 14px;border-radius:8px;background:transparent;border:1px solid rgba(224,106,94,.35);color:#e06a5e;transition:background .15s" style-hover="background:rgba(224,106,94,.1)">ยกเลิกงาน</button>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ wsProcessing }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Workspace — processing" style="flex:1;overflow-y:auto">
+      <div style="max-width:620px;margin:0 auto;padding:44px 24px 80px;display:flex;flex-direction:column;gap:18px">
+        <div style="text-align:center;margin-bottom:6px">
+          <div style="font-size:19px;font-weight:700">กำลังประมวลผลวิดีโอ</div>
+          <div style="font-size:13px;color:#a29c92;margin-top:4px">ปิดหน้านี้ได้เลย งานรันต่อเบื้องหลัง — กลับมาดูเมื่อไหร่ก็ได้</div>
+        </div>
+        <div style="background:#1d1b19;border:1px solid #26241f;border-radius:15px;padding:8px">
+          <sc-for list="{{ stepsR }}" as="st" hint-placeholder-count="6">
+            <div style="display:flex;gap:14px;padding:13px 14px;border-radius:10px;align-items:flex-start">
+              <sc-if value="{{ st.isDone }}" hint-placeholder-val="{{ false }}">
+                <div style="width:26px;height:26px;flex:none;border-radius:99px;background:var(--accent,#e8823f);color:#1a120b;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;animation:pop .35s ease">✓</div>
+              </sc-if>
+              <sc-if value="{{ st.isRunning }}" hint-placeholder-val="{{ false }}">
+                <div style="width:26px;height:26px;flex:none;border-radius:99px;border:2.5px solid color-mix(in oklab,var(--accent,#e8823f) 25%,transparent);border-top-color:var(--accent,#e8823f);animation:spin .8s linear infinite"></div>
+              </sc-if>
+              <sc-if value="{{ st.isPending }}" hint-placeholder-val="{{ false }}">
+                <div style="width:26px;height:26px;flex:none;border-radius:99px;border:1.5px solid #2e2c28"></div>
+              </sc-if>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <div style="font-size:14px;font-weight:600;color:{{ st.nameColor }}">{{ st.name }}</div>
+                  <div style="font-size:12px;color:#6f6a61">{{ st.right }}</div>
+                </div>
+                <div style="font-size:12px;color:#6f6a61;margin-top:1px">{{ st.desc }}</div>
+                <sc-if value="{{ st.isRunning }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:10px">
+                    <div style="height:5px;border-radius:99px;background:#26241f;overflow:hidden">
+                      <div style="height:100%;border-radius:99px;background:var(--accent,#e8823f);width:{{ transcribePct }}%;transition:width .4s"></div>
+                    </div>
+                    <div style="font-size:11.5px;color:#8a847a;font-family:ui-monospace,Menlo,monospace;margin-top:7px">{{ transcribeLabel }}</div>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;padding:0 6px">
+          <div style="font-size:11.5px;color:#6f6a61;letter-spacing:.4px;font-weight:600">ถอดเสียงล่าสุด</div>
+          <sc-for list="{{ feedR }}" as="f" hint-placeholder-count="3">
+            <div style="display:flex;gap:12px;animation:fadeUp .35s ease">
+              <span style="font-size:11.5px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace;flex:none;padding-top:2px">{{ f.time }}</span>
+              <span style="font-size:13.5px;color:#a29c92">{{ f.text }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ wsReady }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Workspace — editor" style="flex:1;display:flex;gap:18px;padding:18px 22px;min-height:0">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:14px;overflow-y:auto;padding-right:2px">
+        <div style="flex:none;background:#0c0b0a;border-radius:14px;aspect-ratio:16/9;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,#131211 0 14px,#161412 14px 28px)"></div>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:99px;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;color:#edeae5;font-size:17px;padding-left:4px;cursor:pointer;transition:transform .15s,background .15s" style-hover="transform:translate(-50%,-50%) scale(1.08);background:rgba(0,0,0,.75)">▶</div>
+          <div style="position:absolute;left:12px;bottom:10px;font-size:11px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace">source.mp4 · 1920×1080 · {{ playheadTime }}</div>
+          <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:0;bottom:0;aspect-ratio:9/16;left:{{ cropLeft }};transform:translateX(-50%);border:2px solid var(--accent,#e8823f);border-radius:6px;box-shadow:0 0 0 999px rgba(10,9,8,.55);transition:left .2s ease">
+              <div style="position:absolute;top:8px;left:50%;transform:translateX(-50%);background:var(--accent,#e8823f);color:#1a120b;font-size:10.5px;font-weight:700;font-family:ui-monospace,Menlo,monospace;padding:2px 8px;border-radius:5px">9:16</div>
+            </div>
+          </sc-if>
+        </div>
+        <div style="flex:none;background:#1d1b19;border:1px solid #26241f;border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <div style="font-size:11.5px;color:#6f6a61;letter-spacing:.4px;font-weight:600">TIMELINE</div>
+            <div style="font-size:11.5px;color:#6f6a61">แถบสี = candidate ตามคะแนน · คลิกเพื่อเลื่อนไปดู</div>
+          </div>
+          <div style="height:44px;background:#131211;border-radius:8px;position:relative;overflow:hidden">
+            <sc-for list="{{ candsR }}" as="cb" hint-placeholder-count="6">
+              <div onClick="{{ cb.onSeek }}" title="{{ cb.range }}" style="position:absolute;top:8px;bottom:8px;left:{{ cb.left }}%;width:{{ cb.width }}%;min-width:5px;border-radius:4px;background:{{ cb.color }};opacity:.85;cursor:pointer;transition:opacity .15s,transform .15s" style-hover="opacity:1;transform:scaleY(1.12)"></div>
+            </sc-for>
+            <div style="position:absolute;top:0;bottom:0;width:2px;background:#edeae5;left:{{ playheadPct }}%;transition:left .25s ease"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace"><span>0:00:00</span><span>{{ wsDur }}</span></div>
+        </div>
+        <div style="flex:none;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:14px;font-weight:700">คลิปของฉัน</div>
+            <div style="font-size:11.5px;color:#a29c92;background:#23211e;border-radius:99px;padding:2px 9px">{{ clipCount }}</div>
+            <div style="flex:1"></div>
+            <div style="font-size:12px;color:#6f6a61">ติ๊กเลือกคลิปที่จะ export</div>
+          </div>
+          <div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:4px">
+            <sc-for list="{{ clipsR }}" as="k" hint-placeholder-count="2">
+              <div onClick="{{ k.onSelect }}" style="flex:none;width:198px;background:#1d1b19;border:1.5px solid {{ k.border }};border-radius:12px;overflow:hidden;cursor:pointer;transition:border-color .2s,transform .15s" style-hover="transform:translateY(-2px)">
+                <div style="height:86px;background:{{ k.grad }};position:relative">
+                  <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0 10px,transparent 10px 20px)"></div>
+                  <div onClick="{{ k.onToggle }}" style="position:absolute;top:8px;left:8px;width:18px;height:18px;border-radius:5px;border:1.5px solid {{ k.checkBorder }};background:{{ k.checkBg }};color:#1a120b;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .15s">{{ k.checkGlyph }}</div>
+                  <div style="position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.65);border-radius:5px;padding:1px 6px;font-size:10.5px;font-family:ui-monospace,Menlo,monospace;color:#c9c4bb">{{ k.durText }}</div>
+                </div>
+                <div style="padding:10px 12px">
+                  <div style="font-size:12.5px;font-family:ui-monospace,Menlo,monospace;color:#edeae5">{{ k.range }}</div>
+                  <div style="font-size:11.5px;color:#8a847a;margin-top:2px">คะแนน {{ k.score }} · {{ k.subCount }} subtitle</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="flex:none;background:#1d1b19;border:1px solid #26241f;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="font-size:13px;font-weight:600">Export · เลือกแล้ว {{ selCount }} คลิป</div>
+          <div style="display:flex;background:#161513;border:1px solid #2b2925;border-radius:9px;padding:3px;gap:2px">
+            <sc-for list="{{ aspectsR }}" as="a" hint-placeholder-count="3">
+              <button onClick="{{ a.onPick }}" style="border:none;cursor:pointer;font-family:inherit;font-size:12.5px;padding:5px 13px;border-radius:6px;background:{{ a.bg }};color:{{ a.color }};transition:all .15s">{{ a.label }}</button>
+            </sc-for>
+          </div>
+          <div onClick="{{ toggleBurn }}" style="display:flex;align-items:center;gap:9px;cursor:pointer">
+            <div style="width:34px;height:20px;border-radius:99px;background:{{ burnTrackBg }};position:relative;transition:background .2s">
+              <div style="position:absolute;top:2px;left:{{ burnKnobLeft }};width:16px;height:16px;border-radius:99px;background:#fff;transition:left .2s"></div>
+            </div>
+            <span style="font-size:12.5px;color:#c9c4bb">ฝัง subtitle</span>
+          </div>
+          <div style="flex:1"></div>
+          <button onClick="{{ startExport }}" style="border:none;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;padding:9px 20px;border-radius:9px;background:var(--accent,#e8823f);color:#1a120b;opacity:{{ exportBtnOpacity }};transition:filter .15s,transform .1s,opacity .2s" style-hover="filter:brightness(1.1)" style-active="transform:scale(.97)">{{ exportBtnText }}</button>
+        </div>
+        <sc-if value="{{ hasExports }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:none;display:flex;flex-direction:column;gap:8px;animation:fadeUp .3s ease">
+            <sc-for list="{{ exportsR }}" as="ex" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:14px;background:#1d1b19;border:1px solid #26241f;border-radius:11px;padding:11px 16px">
+                <sc-if value="{{ ex.done }}" hint-placeholder-val="{{ false }}">
+                  <div style="width:22px;height:22px;flex:none;border-radius:99px;background:#62b97c;color:#0f1c13;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;animation:pop .4s ease">✓</div>
+                </sc-if>
+                <sc-if value="{{ ex.busy }}" hint-placeholder-val="{{ false }}">
+                  <div style="width:20px;height:20px;flex:none;border-radius:99px;border:2.5px solid color-mix(in oklab,var(--accent,#e8823f) 25%,transparent);border-top-color:var(--accent,#e8823f);animation:spin .8s linear infinite"></div>
+                </sc-if>
+                <div style="font-size:13px;font-family:ui-monospace,Menlo,monospace;flex:none">{{ ex.label }}</div>
+                <div style="font-size:12px;color:#8a847a;flex:none">{{ ex.detail }}</div>
+                <div style="flex:1;height:5px;border-radius:99px;background:#26241f;overflow:hidden">
+                  <div style="height:100%;border-radius:99px;background:{{ ex.barColor }};width:{{ ex.pct }}%;transition:width .25s"></div>
+                </div>
+                <sc-if value="{{ ex.done }}" hint-placeholder-val="{{ false }}">
+                  <button style="cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:8px;background:color-mix(in oklab,var(--accent,#e8823f) 15%,transparent);border:none;color:var(--accent,#e8823f);transition:background .15s" style-hover="background:color-mix(in oklab,var(--accent,#e8823f) 25%,transparent)">↓ ดาวน์โหลด</button>
+                </sc-if>
+                <sc-if value="{{ ex.busy }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12px;color:var(--accent,#e8823f);font-family:ui-monospace,Menlo,monospace">{{ ex.pctText }}</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="width:360px;flex:none;background:#1d1b19;border:1px solid #26241f;border-radius:14px;display:flex;flex-direction:column;min-height:0;overflow:hidden">
+        <sc-if value="{{ noSel }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:16px 18px;border-bottom:1px solid #26241f;display:flex;align-items:baseline;justify-content:space-between">
+            <div style="font-size:14.5px;font-weight:700">Candidates</div>
+            <div style="font-size:12px;color:#8a847a">{{ candCount }} ช่วงที่น่าตัด · เรียงตามคะแนน</div>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:8px">
+            <sc-for list="{{ candsR }}" as="c" hint-placeholder-count="6">
+              <div onClick="{{ c.onSeek }}" style="display:flex;align-items:center;gap:11px;padding:10px;border-radius:10px;cursor:pointer;opacity:{{ c.rowOpacity }};transition:background .15s" style-hover="background:#23211e">
+                <div style="font-size:11px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace;width:16px;flex:none">{{ c.rank }}</div>
+                <div style="width:78px;height:44px;flex:none;border-radius:7px;background:{{ c.grad }};position:relative;overflow:hidden">
+                  <div style="position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 8px,transparent 8px 16px)"></div>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:12.5px;font-family:ui-monospace,Menlo,monospace">{{ c.range }}</div>
+                  <div style="font-size:11.5px;color:#8a847a;margin-top:2px">{{ c.durText }}</div>
+                </div>
+                <div style="flex:none;font-size:12px;font-weight:700;font-family:ui-monospace,Menlo,monospace;padding:3px 9px;border-radius:99px;background:{{ c.scoreBg }};color:{{ c.scoreColor }}">{{ c.score }}</div>
+                <sc-if value="{{ c.free }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ c.onAccept }}" title="รับเป็นคลิป" style="width:27px;height:27px;flex:none;cursor:pointer;border-radius:8px;border:1px solid #34312b;background:transparent;color:#c9c4bb;font-size:14px;line-height:1;transition:all .15s" style-hover="border-color:var(--accent,#e8823f);color:var(--accent,#e8823f);background:color-mix(in oklab,var(--accent,#e8823f) 10%,transparent)">＋</button>
+                </sc-if>
+                <sc-if value="{{ c.accepted }}" hint-placeholder-val="{{ false }}">
+                  <div style="width:27px;height:27px;flex:none;border-radius:8px;background:rgba(98,185,124,.13);color:#62b97c;font-size:12px;display:flex;align-items:center;justify-content:center;animation:pop .3s ease">✓</div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:12px 18px;border-top:1px solid #26241f;font-size:11.5px;color:#6f6a61">ลากช่วงเวลาบน timeline เพื่อสร้างคลิปเองก็ได้</div>
+        </sc-if>
+
+        <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;min-height:0;flex:1;animation:slideIn .25s ease">
+            <div style="padding:14px 18px;border-bottom:1px solid #26241f;display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:14.5px;font-weight:700">แก้ไขคลิป <span style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#8a847a;font-weight:400">{{ selRange }}</span></div>
+              <button onClick="{{ closeEditor }}" style="width:26px;height:26px;cursor:pointer;border-radius:7px;border:none;background:transparent;color:#8a847a;font-size:13px;transition:all .15s" style-hover="background:#23211e;color:#edeae5">✕</button>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:22px">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="font-size:11.5px;color:#6f6a61;letter-spacing:.4px;font-weight:600">ช่วงเวลา (TRIM)</div>
+                <div style="display:flex;gap:10px">
+                  <div style="flex:1;background:#161513;border:1px solid #2b2925;border-radius:10px;padding:9px 12px">
+                    <div style="font-size:10.5px;color:#6f6a61;margin-bottom:3px">เริ่ม</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <button onClick="{{ startMinus }}" style="cursor:pointer;border:none;background:transparent;color:#8a847a;font-size:15px;padding:0 4px;transition:color .15s" style-hover="color:var(--accent,#e8823f)">‹</button>
+                      <span style="font-size:13.5px;font-family:ui-monospace,Menlo,monospace">{{ selStartLabel }}</span>
+                      <button onClick="{{ startPlus }}" style="cursor:pointer;border:none;background:transparent;color:#8a847a;font-size:15px;padding:0 4px;transition:color .15s" style-hover="color:var(--accent,#e8823f)">›</button>
+                    </div>
+                  </div>
+                  <div style="flex:1;background:#161513;border:1px solid #2b2925;border-radius:10px;padding:9px 12px">
+                    <div style="font-size:10.5px;color:#6f6a61;margin-bottom:3px">จบ</div>
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <button onClick="{{ endMinus }}" style="cursor:pointer;border:none;background:transparent;color:#8a847a;font-size:15px;padding:0 4px;transition:color .15s" style-hover="color:var(--accent,#e8823f)">‹</button>
+                      <span style="font-size:13.5px;font-family:ui-monospace,Menlo,monospace">{{ selEndLabel }}</span>
+                      <button onClick="{{ endPlus }}" style="cursor:pointer;border:none;background:transparent;color:#8a847a;font-size:15px;padding:0 4px;transition:color .15s" style-hover="color:var(--accent,#e8823f)">›</button>
+                    </div>
+                  </div>
+                </div>
+                <div style="font-size:12px;color:#8a847a">ความยาว <span style="font-family:ui-monospace,Menlo,monospace;color:#edeae5">{{ selDurText }}</span> · ขยายช่วงแล้ว subtitle เดิมที่แก้ไว้ไม่หาย</div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <div style="font-size:11.5px;color:#6f6a61;letter-spacing:.4px;font-weight:600">ตำแหน่งครอป 9:16</div>
+                  <div style="font-size:11.5px;color:var(--accent,#e8823f);font-family:ui-monospace,Menlo,monospace">{{ cropLabel }}</div>
+                </div>
+                <input type="range" min="-100" max="100" value="{{ cropVal }}" onChange="{{ setCrop }}" style="width:100%;cursor:pointer">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#6f6a61"><span>ซ้าย</span><span>กลาง</span><span>ขวา</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <div style="font-size:11.5px;color:#6f6a61;letter-spacing:.4px;font-weight:600">SUBTITLE ({{ selSubCount }})</div>
+                  <a style="font-size:12px;cursor:pointer">↓ ดาวน์โหลด .srt</a>
+                </div>
+                <sc-for list="{{ selSubs }}" as="s" hint-placeholder-count="4">
+                  <div style="background:#161513;border:1px solid #26241f;border-radius:10px;padding:9px 12px;transition:border-color .15s" style-hover="border-color:#34312b">
+                    <div style="font-size:10.5px;color:#6f6a61;font-family:ui-monospace,Menlo,monospace;margin-bottom:4px">{{ s.time }}</div>
+                    <input value="{{ s.text }}" onChange="{{ s.onEdit }}" style="width:100%;background:transparent;border:none;color:#edeae5;font-family:'Anuphan',sans-serif;font-size:13.5px;padding:0">
+                  </div>
+                </sc-for>
+              </div>
+              <button onClick="{{ deleteClip }}" style="cursor:pointer;font-family:inherit;font-size:12.5px;padding:9px;border-radius:9px;background:transparent;border:1px solid rgba(224,106,94,.3);color:#e06a5e;transition:background .15s" style-hover="background:rgba(224,106,94,.09)">ลบคลิปนี้</button>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Settings" style="flex:1;overflow-y:auto">
+    <div style="max-width:720px;margin:0 auto;padding:44px 32px 80px;display:flex;flex-direction:column;gap:26px">
+      <div>
+        <div style="font-size:25px;font-weight:700">ตั้งค่า</div>
+        <div style="font-size:13.5px;color:#a29c92;margin-top:4px">สถานะระบบ โมเดลถอดเสียง และพื้นที่ดิสก์</div>
+      </div>
+      <div style="background:#1d1b19;border:1px solid #26241f;border-radius:15px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:14.5px;font-weight:700">สถานะระบบ</div>
+          <a onClick="{{ goSetup }}" style="font-size:12px;cursor:pointer">ดูหน้าติดตั้ง →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <sc-for list="{{ doctorR }}" as="d" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:11px;background:#161513;border:1px solid #26241f;border-radius:10px;padding:11px 14px">
+              <div style="width:20px;height:20px;flex:none;border-radius:99px;background:rgba(98,185,124,.13);color:#62b97c;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:700">✓</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-family:ui-monospace,Menlo,monospace">{{ d.name }}</div>
+                <div style="font-size:11.5px;color:#8a847a">{{ d.detail }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#1d1b19;border:1px solid #26241f;border-radius:15px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="font-size:14.5px;font-weight:700">โมเดลถอดเสียง (whisper)</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div onClick="{{ pickLarge }}" style="display:flex;align-items:center;gap:14px;border:1.5px solid {{ largeBorder }};background:#161513;border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .2s">
+            <div style="width:18px;height:18px;flex:none;border-radius:99px;border:2px solid {{ largeRadio }};display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;border-radius:99px;background:{{ largeDot }};transition:background .15s"></div></div>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">large-v3 <span style="font-size:11.5px;color:#8a847a;font-weight:400">· 3.1 GB</span></div>
+              <div style="font-size:12.5px;color:#8a847a;margin-top:2px">แม่นยำที่สุดสำหรับภาษาไทย — ค่าเริ่มต้นที่แนะนำ</div>
+            </div>
+            <div style="flex:none;font-size:11.5px;color:#62b97c;background:rgba(98,185,124,.12);border-radius:99px;padding:3px 11px">ดาวน์โหลดแล้ว</div>
+          </div>
+          <div onClick="{{ pickMedium }}" style="display:flex;align-items:center;gap:14px;border:1.5px solid {{ medBorder }};background:#161513;border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .2s">
+            <div style="width:18px;height:18px;flex:none;border-radius:99px;border:2px solid {{ medRadio }};display:flex;align-items:center;justify-content:center"><div style="width:8px;height:8px;border-radius:99px;background:{{ medDot }};transition:background .15s"></div></div>
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">medium <span style="font-size:11.5px;color:#8a847a;font-weight:400">· 1.5 GB</span></div>
+              <div style="font-size:12.5px;color:#8a847a;margin-top:2px">เร็วกว่า ~2–3 เท่า แม่นยำลดลงเล็กน้อย — เหมาะกับไลฟ์ยาวหลายชั่วโมง</div>
+            </div>
+            <sc-if value="{{ medIdle }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ dlMedium }}" style="flex:none;cursor:pointer;font-family:inherit;font-size:12px;padding:6px 13px;border-radius:8px;background:transparent;border:1px solid #34312b;color:#c9c4bb;transition:border-color .15s" style-hover="border-color:var(--accent,#e8823f);color:var(--accent,#e8823f)">↓ ดาวน์โหลด</button>
+            </sc-if>
+            <sc-if value="{{ medBusy }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:none;display:flex;align-items:center;gap:8px">
+                <div style="width:70px;height:5px;border-radius:99px;background:#26241f;overflow:hidden"><div style="height:100%;background:var(--accent,#e8823f);width:{{ medPct }}%;transition:width .3s"></div></div>
+                <span style="font-size:11.5px;color:var(--accent,#e8823f);font-family:ui-monospace,Menlo,monospace">{{ medPctText }}</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ medDone }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:none;font-size:11.5px;color:#62b97c;background:rgba(98,185,124,.12);border-radius:99px;padding:3px 11px;animation:pop .35s ease">ดาวน์โหลดแล้ว</div>
+            </sc-if>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#6f6a61">ดาวน์โหลดต่อจากเดิมได้ถ้าหลุดกลางทาง (resume อัตโนมัติ)</div>
+      </div>
+      <div style="background:#1d1b19;border:1px solid #26241f;border-radius:15px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:14.5px;font-weight:700">พื้นที่ดิสก์</div>
+          <div style="font-size:12.5px;color:#8a847a">รวม <span style="font-family:ui-monospace,Menlo,monospace;color:#edeae5">11.6 GB</span> ใน data/</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ diskR }}" as="dk" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:14px;background:#161513;border:1px solid #26241f;border-radius:10px;padding:11px 14px">
+              <div style="flex:1;min-width:0;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ dk.name }}</div>
+              <div style="width:120px;height:5px;border-radius:99px;background:#26241f;overflow:hidden"><div style="height:100%;background:#4a4438;width:{{ dk.pct }}%"></div></div>
+              <div style="flex:none;width:64px;text-align:right;font-size:12px;color:#8a847a;font-family:ui-monospace,Menlo,monospace">{{ dk.size }}</div>
+              <button style="flex:none;cursor:pointer;font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:7px;background:transparent;border:1px solid #2b2925;color:#8a847a;transition:all .15s" style-hover="border-color:rgba(224,106,94,.4);color:#e06a5e">ลบ</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isSetup }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Setup" style="flex:1;overflow-y:auto;display:flex;align-items:center;justify-content:center;padding:40px 24px">
+    <div style="width:520px;max-width:100%;background:#1d1b19;border:1px solid #26241f;border-radius:18px;padding:34px 34px 28px;display:flex;flex-direction:column;gap:20px;animation:fadeUp .35s ease">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+        <div style="width:44px;height:44px;border-radius:13px;background:var(--accent,#e8823f);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;padding-left:3px">▶</div>
+        <div style="font-size:20px;font-weight:700">ติดตั้ง ShotPrompt</div>
+        <div style="font-size:13px;color:#a29c92;margin-top:-4px">ต้องมีเครื่องมือเหล่านี้ในเครื่องก่อนเริ่มใช้งาน — ติดตั้งครั้งเดียวจบ</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:12px;background:#161513;border:1px solid #26241f;border-radius:10px;padding:11px 14px">
+          <div style="width:20px;height:20px;flex:none;border-radius:99px;background:rgba(98,185,124,.13);color:#62b97c;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:700">✓</div>
+          <div style="font-size:13px;font-family:ui-monospace,Menlo,monospace;flex:1">ffmpeg · ffprobe</div>
+          <div style="font-size:11.5px;color:#8a847a">7.0.1</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;background:#161513;border:1px solid {{ setupWhisperBorder }};border-radius:10px;padding:11px 14px;transition:border-color .3s">
+          <sc-if value="{{ setupWhisperOk }}" hint-placeholder-val="{{ false }}">
+            <div style="width:20px;height:20px;flex:none;border-radius:99px;background:rgba(98,185,124,.13);color:#62b97c;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:700;animation:pop .35s ease">✓</div>
+          </sc-if>
+          <sc-if value="{{ setupWhisperMissing }}" hint-placeholder-val="{{ true }}">
+            <div style="width:20px;height:20px;flex:none;border-radius:99px;background:rgba(224,106,94,.13);color:#e06a5e;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:700">✕</div>
+          </sc-if>
+          <div style="font-size:13px;font-family:ui-monospace,Menlo,monospace;flex:1">whisper-cli</div>
+          <div style="font-size:11.5px;color:{{ setupWhisperStatusColor }}">{{ setupWhisperStatus }}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0f0e0d;border:1px solid #26241f;border-radius:10px;padding:11px 14px">
+          <div style="flex:1;font-size:12.5px;font-family:ui-monospace,Menlo,monospace;color:#c9c4bb">brew install ffmpeg whisper-cpp</div>
+          <button onClick="{{ copyCmd }}" style="flex:none;cursor:pointer;font-family:inherit;font-size:11.5px;padding:5px 12px;border-radius:7px;background:transparent;border:1px solid #34312b;color:{{ copyColor }};transition:all .15s" style-hover="border-color:#4a4438">{{ copyLabel }}</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;background:#161513;border:1px solid #26241f;border-radius:10px;padding:11px 14px">
+          <sc-if value="{{ setupModelDone }}" hint-placeholder-val="{{ false }}">
+            <div style="width:20px;height:20px;flex:none;border-radius:99px;background:rgba(98,185,124,.13);color:#62b97c;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:700;animation:pop .35s ease">✓</div>
+          </sc-if>
+          <sc-if value="{{ setupModelNotDone }}" hint-placeholder-val="{{ true }}">
+            <div style="width:20px;height:20px;flex:none;border-radius:99px;border:1.5px solid #34312b"></div>
+          </sc-if>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-family:ui-monospace,Menlo,monospace">โมเดล large-v3</div>
+            <div style="font-size:11.5px;color:#8a847a">3.1 GB · แม่นยำที่สุดสำหรับภาษาไทย</div>
+          </div>
+          <sc-if value="{{ setupModelIdle }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ dlSetupModel }}" style="flex:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;padding:6px 14px;border-radius:8px;background:color-mix(in oklab,var(--accent,#e8823f) 15%,transparent);border:none;color:var(--accent,#e8823f);transition:background .15s" style-hover="background:color-mix(in oklab,var(--accent,#e8823f) 25%,transparent)">↓ ดาวน์โหลด</button>
+          </sc-if>
+          <sc-if value="{{ setupModelBusy }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:none;display:flex;align-items:center;gap:8px">
+              <div style="width:80px;height:5px;border-radius:99px;background:#26241f;overflow:hidden"><div style="height:100%;background:var(--accent,#e8823f);width:{{ setupPct }}%;transition:width .3s"></div></div>
+              <span style="font-size:11.5px;color:var(--accent,#e8823f);font-family:ui-monospace,Menlo,monospace">{{ setupPctText }}</span>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      <button onClick="{{ recheck }}" style="cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;padding:11px;border-radius:10px;background:{{ recheckBg }};border:none;color:{{ recheckColor }};transition:all .2s" style-active="transform:scale(.98)">{{ recheckLabel }}</button>
+      <div style="font-size:11.5px;color:#6f6a61;text-align:center;margin-top:-8px">ตรวจจาก PATH ของเครื่อง · Apple Silicon ใช้ Metal GPU อัตโนมัติ</div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;library&quot;,&quot;options&quot;:[&quot;library&quot;,&quot;workspace&quot;,&quot;processing&quot;,&quot;settings&quot;,&quot;setup&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Demo&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#6b8fd9&quot;,&quot;options&quot;:[&quot;#e8823f&quot;,&quot;#e0685e&quot;,&quot;#5aa87f&quot;,&quot;#6b8fd9&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Theme&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const G = ['linear-gradient(135deg,#3a2c22,#241d18)','linear-gradient(135deg,#28302c,#1b201d)','linear-gradient(135deg,#33272b,#211a1c)','linear-gradient(135deg,#2f2b22,#1f1c17)'];
+    this.G = G;
+    this.state = {
+      page: 'library', wsVideo: null,
+      uploadLang: 'th', uploading: false, uploadPct: 0,
+      videos: [
+        { id: 'v1', name: 'ไลฟ์ขายเสื้อผ้า_18กค.mp4', dur: 9252, status: 'ready', date: '18 ก.ค.', clips: 2, grad: G[0] },
+        { id: 'v2', name: 'ไลฟ์สกินแคร์ช่วงเย็น.mp4', dur: 4365, status: 'processing', date: '19 ก.ค.', clips: 0, grad: G[1] },
+        { id: 'v3', name: 'ไลฟ์รองเท้ามือสอง.mov', dur: 11122, status: 'failed', date: '16 ก.ค.', clips: 0, grad: G[2] },
+      ],
+      transcribePct: 43, feed: [],
+      candidates: [
+        { id: 'c1', start: 1123, end: 1178, score: 92 },
+        { id: 'c2', start: 3245, end: 3308, score: 84 },
+        { id: 'c3', start: 545, end: 590, score: 71 },
+        { id: 'c4', start: 5872, end: 5926, score: 63 },
+        { id: 'c5', start: 7204, end: 7241, score: 55 },
+        { id: 'c6', start: 8410, end: 8459, score: 43 },
+      ],
+      clips: [
+        { id: 'k1', candId: 'c1', start: 1123, end: 1178, score: 92, crop: 0, grad: G[0], subs: [
+          { start: 1123.2, end: 1126.8, text: 'ด่วนเลยค่ะแม่ ล็อตสุดท้ายแล้วนะคะ' },
+          { start: 1127.1, end: 1130.4, text: 'ตัวนี้เหลือแค่ 3 ชิ้นเท่านั้น' },
+          { start: 1130.9, end: 1135.2, text: 'ลดจาก 590 เหลือ 199 บาท ส่งฟรีด้วยค่ะ' },
+          { start: 1135.8, end: 1139.5, text: 'ใครเอาพิมพ์ CF มาเลยค่ะ' },
+          { start: 1140.1, end: 1144.0, text: 'โอนปุ๊บแอดมินจัดส่งให้เลยวันนี้' },
+        ]},
+        { id: 'k2', candId: 'c3', start: 545, end: 590, score: 71, crop: 0, grad: G[3], subs: [
+          { start: 545.4, end: 548.9, text: 'โปรวันนี้เท่านั้นนะคะแม่' },
+          { start: 549.3, end: 553.0, text: 'ซื้อ 1 แถม 1 ทุกสีทุกไซซ์เลยค่ะ' },
+          { start: 553.6, end: 557.2, text: 'ของแถมหมดแล้วหมดเลยนะคะ' },
+          { start: 557.8, end: 561.5, text: 'กดตะกร้าเลยค่ะ ส่งฟรีทั่วไทย' },
+        ]},
+      ],
+      selClip: null, exportSel: { k1: true, k2: true }, aspect: '9:16', burnSub: true,
+      exportsList: [], playheadPct: 12.1,
+      copied: false, model: 'large-v3', medDl: { st: 'idle', pct: 0 },
+      setupDl: { st: 'idle', pct: 0 }, setupWhisper: false,
+    };
+    this.feedPool = [
+      'ครีมตัวนี้ขายดีมากเลยนะคะทุกคน', 'ทาแล้วหน้าฉ่ำวาวสุด ๆ ไปเลย', 'เดี๋ยวมีโค้ดลดให้ในไลฟ์นะคะ',
+      'ใครเพิ่งเข้ามาพิมพ์ทักทายกันหน่อยค่ะ', 'ตัวนี้เหลือ 20 ชิ้นสุดท้ายแล้วนะ', 'แอดมินเช็คยอดให้เลยค่ะ',
+      'ราคานี้มีแค่ในไลฟ์เท่านั้นค่ะ', 'ส่งฟรีทุกออเดอร์วันนี้เลยค่ะ',
+    ];
+    this.subPool = ['นาทีนี้ต้องรีบแล้วค่ะ', 'ลดพิเศษเฉพาะในไลฟ์นะคะ', 'ใครเอาพิมพ์มาเลยค่ะ', 'ของมีจำกัดจริง ๆ ค่ะ'];
+  }
+  applyScreen(scr) {
+    if (scr === 'workspace') this.setState({ page: 'workspace', wsVideo: 'v1' });
+    else if (scr === 'processing') this.setState({ page: 'workspace', wsVideo: 'v2' });
+    else if (scr) this.setState({ page: scr });
+  }
+  componentDidMount() {
+    document.documentElement.style.setProperty('--accent', this.props.accent ?? '#e8823f');
+    if (this.props.startScreen && this.props.startScreen !== 'library') this.applyScreen(this.props.startScreen);
+    let n = 0;
+    this.tick = setInterval(() => {
+      this.setState(s => {
+        const pct = Math.min(97, s.transcribePct + 0.12);
+        let feed = s.feed;
+        if (n % 8 === 0) {
+          const t = 4365 * pct / 100;
+          feed = [...feed, { time: this.fmt(t), text: this.feedPool[Math.floor(n / 8) % this.feedPool.length] }].slice(-3);
+        }
+        n++;
+        return { transcribePct: pct, feed };
+      });
+    }, 400);
+  }
+  componentWillUnmount() { clearInterval(this.tick); clearInterval(this.expTick); clearInterval(this.upTick); clearInterval(this.dlTick); }
+  componentDidUpdate(prev) {
+    if (prev.accent !== this.props.accent) document.documentElement.style.setProperty('--accent', this.props.accent ?? '#e8823f');
+    if (prev.startScreen !== this.props.startScreen) this.applyScreen(this.props.startScreen);
+  }
+  fmt(s) { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); }
+  scoreColor(sc) { return sc >= 70 ? 'var(--accent,#e8823f)' : sc >= 50 ? '#d9a13f' : '#7a746b'; }
+  makeSubs(start, end) {
+    const n = 3, span = (end - start) / n, out = [];
+    for (let i = 0; i < n; i++) out.push({ start: +(start + i * span).toFixed(1), end: +(start + (i + 1) * span - 0.4).toFixed(1), text: this.subPool[i % this.subPool.length] });
+    return out;
+  }
+  startUploadSim() {
+    if (this.state.uploading) return;
+    this.setState({ uploading: true, uploadPct: 0 });
+    this.upTick = setInterval(() => {
+      this.setState(s => {
+        const p = s.uploadPct + 2.5;
+        if (p >= 100) {
+          clearInterval(this.upTick);
+          return { uploading: false, uploadPct: 0, videos: [{ id: 'v4', name: 'ไลฟ์กระเป๋าแบรนด์เนม.mp4', dur: 6034, status: 'processing', date: 'วันนี้', clips: 0, grad: this.G[3] }, ...s.videos] };
+        }
+        return { uploadPct: p };
+      });
+    }, 70);
+  }
+  startExportSim() {
+    const sel = this.state.clips.filter(k => this.state.exportSel[k.id]);
+    if (!sel.length || this.expTick) return;
+    const rows = sel.map((k, i) => ({ id: k.id, label: 'คลิป ' + this.fmt(k.start), pct: 0, status: i === 0 ? 'rendering' : 'queued' }));
+    this.setState({ exportsList: rows });
+    this.expTick = setInterval(() => {
+      this.setState(s => {
+        const list = s.exportsList.map(r => ({ ...r }));
+        const cur = list.find(r => r.status === 'rendering');
+        if (!cur) { clearInterval(this.expTick); this.expTick = null; return {}; }
+        cur.pct = Math.min(100, cur.pct + 3 + Math.random() * 4);
+        if (cur.pct >= 100) {
+          cur.status = 'done'; cur.pct = 100;
+          const nx = list.find(r => r.status === 'queued');
+          if (nx) nx.status = 'rendering'; else { clearInterval(this.expTick); this.expTick = null; }
+        }
+        return { exportsList: list };
+      });
+    }, 130);
+  }
+  startDl(key) {
+    if (this.dlTick) return;
+    this.setState({ [key]: { st: 'busy', pct: 0 } });
+    this.dlTick = setInterval(() => {
+      this.setState(s => {
+        const p = s[key].pct + 1.6;
+        if (p >= 100) { clearInterval(this.dlTick); this.dlTick = null; return { [key]: { st: 'done', pct: 100 } }; }
+        return { [key]: { st: 'busy', pct: p } };
+      });
+    }, 60);
+  }
+  updateClip(id, patch) { this.setState(s => ({ clips: s.clips.map(k => k.id === id ? { ...k, ...patch } : k) })); }
+  renderVals() {
+    const s = this.state;
+    const v2 = s.videos.find(v => v.id === 'v2') || s.videos[1];
+    const ws = s.videos.find(v => v.id === s.wsVideo);
+    const V1DUR = 9252;
+    const sel = s.clips.find(k => k.id === s.selClip);
+    const nav = { on: { bg: '#26231f', c: '#edeae5' }, off: { bg: 'transparent', c: '#a29c92' } };
+    const isLib = s.page === 'library', isSet = s.page === 'settings';
+    const pctT = Math.round(s.transcribePct);
+    const curT = 4365 * s.transcribePct / 100;
+    const stepDefs = [
+      { name: 'แปลงไฟล์วิดีโอ', desc: 'remux เป็น mp4 พร้อมเล่นบนเบราว์เซอร์', st: 'done', right: 'เสร็จใน 14 วิ' },
+      { name: 'แยกเสียง', desc: '16kHz mono สำหรับ whisper', st: 'done', right: 'เสร็จใน 9 วิ' },
+      { name: 'ถอดเสียง', desc: 'whisper large-v3 · Metal GPU', st: 'running', right: 'กำลังทำงาน' },
+      { name: 'ตรวจจับฉาก', desc: 'scene detection · threshold 0.3', st: 'pending', right: 'รอคิว' },
+      { name: 'ค้นหา hook', desc: 'keyword scoring 4-phase (ไทย)', st: 'pending', right: 'รอคิว' },
+      { name: 'สร้างภาพตัวอย่าง', desc: 'thumbnail ต่อ candidate', st: 'pending', right: 'รอคิว' },
+    ];
+    const acceptedMap = {}; s.clips.forEach(k => { if (k.candId) acceptedMap[k.candId] = true; });
+    const selCount = s.clips.filter(k => s.exportSel[k.id]).length;
+    return {
+      isLibrary: isLib, isWorkspace: s.page === 'workspace', isSettings: isSet, isSetup: s.page === 'setup',
+      navLibBg: isLib ? nav.on.bg : nav.off.bg, navLibColor: isLib ? nav.on.c : nav.off.c,
+      navSetBg: isSet ? nav.on.bg : nav.off.bg, navSetColor: isSet ? nav.on.c : nav.off.c,
+      goLibrary: () => this.setState({ page: 'library', selClip: null }),
+      goSettings: () => this.setState({ page: 'settings' }),
+      goSetup: () => this.setState({ page: 'setup' }),
+      videoCountText: s.videos.length + ' วิดีโอ',
+      notUploading: !s.uploading, uploading: s.uploading,
+      uploadPct: s.uploadPct, uploadPctText: Math.round(s.uploadPct) + '%',
+      uploadLangLabel: s.uploadLang === 'th' ? 'ไทย' : 'อังกฤษ',
+      langTh: () => this.setState({ uploadLang: 'th' }), langEn: () => this.setState({ uploadLang: 'en' }),
+      langThBg: s.uploadLang === 'th' ? '#2e2b26' : 'transparent', langThColor: s.uploadLang === 'th' ? '#edeae5' : '#8a847a',
+      langEnBg: s.uploadLang === 'en' ? '#2e2b26' : 'transparent', langEnColor: s.uploadLang === 'en' ? '#edeae5' : '#8a847a',
+      startUpload: () => this.startUploadSim(),
+      videosR: s.videos.map(v => {
+        const p = v.status === 'processing', r = v.status === 'ready', f = v.status === 'failed';
+        return {
+          name: v.name, grad: v.grad, durLabel: this.fmt(v.dur),
+          meta: this.fmt(v.dur) + ' ชม. · ภาษาไทย · อัปโหลด ' + v.date + (f ? ' · whisper-cli exited 1' : ''),
+          clipsText: v.clips > 0 ? v.clips + ' คลิป' : '—',
+          isProcessing: p, isReady: r, isFailed: f,
+          chipText: p ? (v.id === 'v2' ? 'ถอดเสียง ' + pctT + '%' : 'รอคิว') : r ? 'พร้อมใช้งาน' : 'ล้มเหลว',
+          chipBg: p ? 'color-mix(in oklab,var(--accent,#e8823f) 12%,transparent)' : r ? 'rgba(98,185,124,.12)' : 'rgba(224,106,94,.12)',
+          chipColor: p ? 'var(--accent,#e8823f)' : r ? '#62b97c' : '#e06a5e',
+          cursor: f ? 'default' : 'pointer',
+          onOpen: () => { if (v.status === 'ready') this.setState({ page: 'workspace', wsVideo: 'v1' }); else if (v.status === 'processing') this.setState({ page: 'workspace', wsVideo: 'v2' }); },
+          onRetry: (e) => { e.stopPropagation(); this.setState(st => ({ videos: st.videos.map(x => x.id === v.id ? { ...x, status: 'processing' } : x) })); },
+        };
+      }),
+      wsName: ws ? ws.name : '', wsDur: ws ? this.fmt(ws.dur) : '',
+      wsProcessing: !!ws && ws.status !== 'ready', wsReady: !!ws && ws.status === 'ready',
+      cancelJob: () => this.setState(st => ({ page: 'library', videos: st.videos.map(x => x.id === s.wsVideo ? { ...x, status: 'failed' } : x) })),
+      stepsR: stepDefs.map(d => ({
+        name: d.name, desc: d.desc, right: d.st === 'running' ? pctT + '%' : d.right,
+        isDone: d.st === 'done', isRunning: d.st === 'running', isPending: d.st === 'pending',
+        nameColor: d.st === 'pending' ? '#6f6a61' : '#edeae5',
+      })),
+      transcribePct: s.transcribePct,
+      transcribeLabel: pctT + '% · segment ล่าสุด ' + this.fmt(curT) + ' / ' + this.fmt(4365) + ' · resume ได้ถ้าหลุด',
+      feedR: s.feed,
+      playheadPct: s.playheadPct, playheadTime: this.fmt(V1DUR * s.playheadPct / 100),
+      candsR: s.candidates.map((c, i) => {
+        const col = this.scoreColor(c.score), acc = !!acceptedMap[c.id];
+        return {
+          rank: '#' + (i + 1), range: this.fmt(c.start) + ' – ' + this.fmt(c.end),
+          durText: Math.round(c.end - c.start) + ' วินาที', score: c.score,
+          scoreBg: 'color-mix(in oklab,' + col + ' 14%,transparent)', scoreColor: col, color: col,
+          left: +(c.start / V1DUR * 100).toFixed(2), width: +((c.end - c.start) / V1DUR * 100).toFixed(2),
+          grad: this.G[i % 4], accepted: acc, free: !acc, rowOpacity: acc ? .55 : 1,
+          onSeek: () => this.setState({ playheadPct: c.start / V1DUR * 100 }),
+          onAccept: (e) => { e.stopPropagation(); const id = 'k' + Date.now(); this.setState(st => ({ clips: [...st.clips, { id, candId: c.id, start: c.start, end: c.end, score: c.score, crop: 0, grad: this.G[(i + 1) % 4], subs: this.makeSubs(c.start, c.end) }], exportSel: { ...st.exportSel, [id]: true }, playheadPct: c.start / V1DUR * 100 })); },
+        };
+      }),
+      candCount: s.candidates.length,
+      clipCount: s.clips.length, clipsR: s.clips.map(k => ({
+        range: this.fmt(k.start) + ' – ' + this.fmt(k.end), durText: Math.round(k.end - k.start) + ' วิ',
+        score: k.score, subCount: k.subs.length, grad: k.grad,
+        border: s.selClip === k.id ? 'var(--accent,#e8823f)' : '#26241f',
+        checkBg: s.exportSel[k.id] ? 'var(--accent,#e8823f)' : 'rgba(0,0,0,.4)',
+        checkBorder: s.exportSel[k.id] ? 'var(--accent,#e8823f)' : 'rgba(255,255,255,.35)',
+        checkGlyph: s.exportSel[k.id] ? '✓' : '',
+        onSelect: () => this.setState({ selClip: k.id, playheadPct: k.start / V1DUR * 100 }),
+        onToggle: (e) => { e.stopPropagation(); this.setState(st => ({ exportSel: { ...st.exportSel, [k.id]: !st.exportSel[k.id] } })); },
+      })),
+      noSel: !sel, hasSel: !!sel,
+      selRange: sel ? this.fmt(sel.start) + ' – ' + this.fmt(sel.end) : '',
+      selStartLabel: sel ? this.fmt(sel.start) : '', selEndLabel: sel ? this.fmt(sel.end) : '',
+      selDurText: sel ? (sel.end - sel.start).toFixed(1) + ' วินาที' : '',
+      selSubCount: sel ? sel.subs.length : 0,
+      startMinus: () => sel && this.updateClip(sel.id, { start: Math.max(0, sel.start - 1) }),
+      startPlus: () => sel && this.updateClip(sel.id, { start: Math.min(sel.end - 2, sel.start + 1) }),
+      endMinus: () => sel && this.updateClip(sel.id, { end: Math.max(sel.start + 2, sel.end - 1) }),
+      endPlus: () => sel && this.updateClip(sel.id, { end: sel.end + 1 }),
+      cropVal: sel ? sel.crop * 100 : 0,
+      cropLabel: sel ? (sel.crop === 0 ? 'กลาง' : (sel.crop > 0 ? 'ขวา ' : 'ซ้าย ') + Math.abs(Math.round(sel.crop * 100)) + '%') : '',
+      cropLeft: sel ? 'calc(50% + ' + (sel.crop * 22).toFixed(1) + '%)' : '50%',
+      setCrop: (e) => sel && this.updateClip(sel.id, { crop: +e.target.value / 100 }),
+      selSubs: sel ? sel.subs.map((sub, i) => ({
+        time: this.fmt(sub.start) + ' → ' + this.fmt(sub.end), text: sub.text,
+        onEdit: (e) => this.updateClip(sel.id, { subs: sel.subs.map((x, j) => j === i ? { ...x, text: e.target.value } : x) }),
+      })) : [],
+      closeEditor: () => this.setState({ selClip: null }),
+      deleteClip: () => sel && this.setState(st => { const es = { ...st.exportSel }; delete es[sel.id]; return { clips: st.clips.filter(k => k.id !== sel.id), selClip: null, exportSel: es }; }),
+      selCount,
+      aspectsR: ['9:16', '16:9', 'ต้นฉบับ'].map(a => ({
+        label: a, bg: s.aspect === a ? 'color-mix(in oklab,var(--accent,#e8823f) 16%,transparent)' : 'transparent',
+        color: s.aspect === a ? 'var(--accent,#e8823f)' : '#8a847a',
+        onPick: () => this.setState({ aspect: a }),
+      })),
+      toggleBurn: () => this.setState({ burnSub: !s.burnSub }),
+      burnTrackBg: s.burnSub ? 'var(--accent,#e8823f)' : '#34312b',
+      burnKnobLeft: s.burnSub ? '16px' : '2px',
+      exportBtnText: 'Export ' + (selCount || '') + (selCount ? ' คลิป' : ''),
+      exportBtnOpacity: selCount ? 1 : .4,
+      startExport: () => this.startExportSim(),
+      hasExports: s.exportsList.length > 0,
+      exportsR: s.exportsList.map(r => ({
+        label: r.label, done: r.status === 'done', busy: r.status !== 'done',
+        detail: s.aspect + (s.burnSub ? ' · ฝัง subtitle' : '') + ' · loudnorm 2-pass',
+        pct: Math.round(r.pct), pctText: Math.round(r.pct) + '%',
+        barColor: r.status === 'done' ? '#62b97c' : 'var(--accent,#e8823f)',
+      })),
+      doctorR: [
+        { name: 'ffmpeg', detail: 'พบใน PATH · 7.0.1' }, { name: 'ffprobe', detail: 'พบใน PATH · 7.0.1' },
+        { name: 'whisper-cli', detail: 'พบใน PATH · 1.6.2' }, { name: 'Metal GPU', detail: 'เร่งความเร็วด้วย GPU อยู่' },
+      ],
+      pickLarge: () => this.setState({ model: 'large-v3' }), pickMedium: () => this.setState({ model: 'medium' }),
+      largeBorder: s.model === 'large-v3' ? 'var(--accent,#e8823f)' : '#26241f',
+      largeRadio: s.model === 'large-v3' ? 'var(--accent,#e8823f)' : '#3a3630',
+      largeDot: s.model === 'large-v3' ? 'var(--accent,#e8823f)' : 'transparent',
+      medBorder: s.model === 'medium' ? 'var(--accent,#e8823f)' : '#26241f',
+      medRadio: s.model === 'medium' ? 'var(--accent,#e8823f)' : '#3a3630',
+      medDot: s.model === 'medium' ? 'var(--accent,#e8823f)' : 'transparent',
+      medIdle: s.medDl.st === 'idle', medBusy: s.medDl.st === 'busy', medDone: s.medDl.st === 'done',
+      medPct: s.medDl.pct, medPctText: Math.round(s.medDl.pct) + '%',
+      dlMedium: (e) => { e.stopPropagation(); this.startDl('medDl'); },
+      diskR: [
+        { name: 'ไลฟ์ขายเสื้อผ้า_18กค.mp4', size: '4.2 GB', pct: 36 },
+        { name: 'ไลฟ์สกินแคร์ช่วงเย็น.mp4', size: '2.1 GB', pct: 18 },
+        { name: 'ไลฟ์รองเท้ามือสอง.mov', size: '4.6 GB', pct: 40 },
+        { name: 'ไฟล์ export ทั้งหมด (7 ไฟล์)', size: '620 MB', pct: 6 },
+      ],
+      copyCmd: () => { try { navigator.clipboard.writeText('brew install ffmpeg whisper-cpp'); } catch (e) {} this.setState({ copied: true }); setTimeout(() => this.setState({ copied: false }), 1600); },
+      copyLabel: s.copied ? 'คัดลอกแล้ว ✓' : 'คัดลอก', copyColor: s.copied ? '#62b97c' : '#c9c4bb',
+      setupWhisperOk: s.setupWhisper, setupWhisperMissing: !s.setupWhisper,
+      setupWhisperBorder: s.setupWhisper ? '#26241f' : 'rgba(224,106,94,.3)',
+      setupWhisperStatus: s.setupWhisper ? '1.6.2' : 'ไม่พบใน PATH',
+      setupWhisperStatusColor: s.setupWhisper ? '#8a847a' : '#e06a5e',
+      setupModelIdle: s.setupDl.st === 'idle', setupModelBusy: s.setupDl.st === 'busy',
+      setupModelDone: s.setupDl.st === 'done', setupModelNotDone: s.setupDl.st !== 'done',
+      setupPct: s.setupDl.pct, setupPctText: Math.round(s.setupDl.pct) + '%',
+      dlSetupModel: () => this.startDl('setupDl'),
+      recheck: () => { if (!s.setupWhisper) this.setState({ setupWhisper: true }); else if (s.setupDl.st === 'done') this.setState({ page: 'library' }); },
+      recheckLabel: !s.setupWhisper ? 'ตรวจสอบอีกครั้ง' : s.setupDl.st === 'done' ? 'เริ่มใช้งาน ShotPrompt →' : 'ตรวจสอบอีกครั้ง (รอดาวน์โหลดโมเดล)',
+      recheckBg: s.setupWhisper && s.setupDl.st === 'done' ? 'var(--accent,#e8823f)' : '#26231f',
+      recheckColor: s.setupWhisper && s.setupDl.st === 'done' ? '#1a120b' : '#c9c4bb',
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-19-shotprompt-mvp-design.md` — the spec wins on any conflict.
 
+**UI Design:** `docs/design/ShotPrompt.dc.html` (imported from claude.ai/design) — the visual source of truth for Tasks 13–17. Open it in a browser to see all 5 screens with interactions (`startScreen` prop switches screens: library / workspace / processing / settings / setup). Design tokens:
+- Background `#161513`, surface `#1d1b19`, surface-2 `#161513` (nested), border `#26241f` / `#2b2925` / `#34312b`, text `#edeae5`, muted `#a29c92` / `#8a847a` / `#6f6a61`
+- Accent `#e8823f` (orange), success `#62b97c`, danger `#e06a5e`, warn `#d9a13f`
+- Font **Anuphan** (Thai+Latin) via `next/font/google` (fetched at build — no runtime CDN), mono `ui-monospace, Menlo`
+- Radii: cards 12–16px, buttons/chips 8–9px; dark theme only
+
 ## Global Constraints
 
 - Hook constants (verbatim from old repo, never change): `SILENCE_GAP=3.0`, `SCENE_WINDOW=30`, `SCORE_THRESHOLD=40`, `WINDOW_PAD=5`, `BREATH_PAD=1.5`, `MERGE_GAP=15`, `MAX_CLIP_DURATION=90`, `SCENE_BASE_SCORE=35`, `SCENE_MIN_INTERVAL=15`
@@ -1438,7 +1444,8 @@ export async function run(db: DB, videoId: string, ctx: JobCtx) {
       db.insert(segments).values({ videoId, start: seg.start, end: seg.end, text: seg.text }).run()
       if (Date.now() - lastEmit > 2000) {
         lastEmit = Date.now()
-        emitEvent('step:update', { videoId, name: 'transcribe', status: 'running', progress: v.duration ? seg.end / v.duration : 0 })
+        // `text` feeds the live transcript feed in the processing screen (design)
+        emitEvent('step:update', { videoId, name: 'transcribe', status: 'running', progress: v.duration ? seg.end / v.duration : 0, text: seg.text, time: seg.end })
       }
     },
   })
@@ -2017,23 +2024,48 @@ Route wiring in `systemRoutes`: `POST /system/model/download` — 409 when `exis
 
 ---
 
-### Task 13: apps/web — scaffold, Eden client, SSE hook
+### Task 13: apps/web — scaffold, design tokens, Eden client, SSE hook, app shell
 
 **Files:**
-- Create: `apps/web/` (Next.js app: `package.json`, `next.config.ts`, `tsconfig.json`, `app/layout.tsx`, `app/globals.css`, `lib/api.ts`, `lib/use-events.ts`, `components.json` via shadcn init)
+- Create: `apps/web/` (Next.js App Router: `package.json`, `next.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `app/layout.tsx`, `app/globals.css`, `lib/api.ts`, `lib/use-events.ts`, `lib/format.ts`, `components/app-shell.tsx`)
 
 **Interfaces:**
-- Produces: `api` — Eden treaty client `treaty<App>('http://127.0.0.1:3001')`; `useEvents(handler: (e: {type: string; [k: string]: unknown}) => void)` — EventSource on `/events`, calls `handler({type:'$reconnect'})` on every `onopen` after the first so pages refetch on reconnect; auto-retry is native to EventSource.
+- Produces:
+  - `api` — Eden treaty client `treaty<App>('http://127.0.0.1:3001')` + `API_BASE`
+  - `useEvents(handler)` — SSE hook; emits `{type:'$reconnect'}` on every reopen after the first
+  - `fmtTime(seconds): string` — `H:MM:SS` (design shows `2:34:12` style), `fmtBytes(n): string`
+  - `<AppShell active="library"|"settings">` — top bar per design: logo ▶ ShotPrompt (link `/`), nav pills คลังวิดีโอ/ตั้งค่า, spacer, status chip (green pulse dot + "ระบบพร้อม · Metal GPU" from `api.system.doctor.get()`, red "ต้องติดตั้งเพิ่ม" linking `/setup` when doctor fails), right corner `v0.1 · 127.0.0.1`
+  - Tailwind theme tokens (from the plan header's Design Tokens): `bg`, `surface`, `surface2`, `line`, `line2`, `ink`, `muted`, `dim`, `accent`, `ok`, `err`, `warn`
 
 - [ ] **Step 1: Scaffold**
 
 ```bash
 cd apps && bunx create-next-app@latest web --ts --app --tailwind --no-eslint --src-dir=false --import-alias "@/*" --use-bun
-cd web && bunx shadcn@latest init -d && bunx shadcn@latest add button card input slider table badge dialog progress select textarea
 ```
-Set `apps/web/package.json` name to `web`, add deps `"@elysiajs/eden": "^1.1.0"`, `"@shotprompt/server": "workspace:*"`, script `"dev": "next dev -H 127.0.0.1 -p 3000"`.
+Set `apps/web/package.json` name to `web`, deps `"@elysiajs/eden": "^1.1.0"`, `"@shotprompt/server": "workspace:*"`, script `"dev": "next dev -H 127.0.0.1 -p 3000"`. No shadcn — the design is fully custom-styled; native elements + Tailwind cover everything (toggle, range slider, dialogs are simple enough).
 
-- [ ] **Step 2: `lib/api.ts` + `lib/use-events.ts`**
+- [ ] **Step 2: Design tokens + font**
+
+`tailwind.config.ts` — extend colors exactly:
+```ts
+colors: {
+  bg: '#161513', surface: '#1d1b19', surface2: '#161513', header: '#191816',
+  line: '#26241f', line2: '#2b2925', line3: '#34312b',
+  ink: '#edeae5', muted: '#a29c92', dim: '#8a847a', faint: '#6f6a61',
+  accent: '#e8823f', ok: '#62b97c', err: '#e06a5e', warn: '#d9a13f',
+}
+```
+`app/layout.tsx` — Anuphan via next/font (build-time fetch, no runtime CDN):
+```tsx
+import { Anuphan } from 'next/font/google'
+const anuphan = Anuphan({ subsets: ['thai', 'latin'], weight: ['400', '500', '600', '700'] })
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="th"><body className={`${anuphan.className} bg-bg text-ink min-h-screen`}>{children}</body></html>
+}
+```
+`globals.css`: dark scrollbar styles + `input[type=range]{accent-color:#e8823f}` + keyframes `spin`, `pop`, `fadeUp`, `pulse` (copy values from the design file's `<style>` block).
+
+- [ ] **Step 3: `lib/api.ts`, `lib/use-events.ts`, `lib/format.ts`, `components/app-shell.tsx`**
 
 ```ts
 // lib/api.ts
@@ -2047,7 +2079,6 @@ export const API_BASE = 'http://127.0.0.1:3001'
 'use client'
 import { useEffect, useRef } from 'react'
 import { API_BASE } from './api'
-
 export function useEvents(handler: (e: { type: string; [k: string]: unknown }) => void) {
   const ref = useRef(handler); ref.current = handler
   useEffect(() => {
@@ -2059,84 +2090,132 @@ export function useEvents(handler: (e: { type: string; [k: string]: unknown }) =
   }, [])
 }
 ```
+```ts
+// lib/format.ts
+export const fmtTime = (s: number) => {
+  s = Math.max(0, Math.round(s))
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60
+  return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`
+}
+export const fmtBytes = (n: number) =>
+  n >= 1e9 ? (n / 1e9).toFixed(1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : Math.round(n / 1e3) + ' KB'
+```
+`app-shell.tsx`: header 54px per design; fetch doctor on mount; chip green when all booleans true + model downloaded, else red chip linking `/setup`.
 
-- [ ] **Step 3: Verify** — `bun run dev` at root; visit `http://127.0.0.1:3000` (default Next page renders), server console reachable.
-- [ ] **Step 4: Commit** — `git commit -am "feat(web): next.js scaffold with eden client and sse hook"`
+- [ ] **Step 4: Verify** — `bun run dev` at root; `http://127.0.0.1:3000` shows shell with status chip reflecting real doctor state.
+- [ ] **Step 5: Commit** — `git commit -am "feat(web): scaffold with design tokens, app shell, eden client, sse hook"`
 
 ---
 
 ### Task 14: apps/web — Library page (`/`)
 
 **Files:**
-- Create: `apps/web/app/page.tsx`, `apps/web/components/upload-form.tsx`, `apps/web/components/video-list.tsx`
+- Create: `apps/web/app/page.tsx`, `apps/web/components/upload-zone.tsx`, `apps/web/components/video-row.tsx`
 
 **Interfaces:**
-- Consumes: `api.videos.get()`, `api.videos.post(...)`, `api.videos({ id }).delete()`, `api.videos({ id }).retry.post()`, `useEvents`.
+- Consumes: `api.videos.get()`, `POST ${API_BASE}/videos` (multipart via XHR for progress), `api.videos.post({ path, language })`, `api.videos({ id }).retry.post()`, `useEvents`, `<AppShell>`.
+- Design: Library screen in `docs/design/ShotPrompt.dc.html` — **no delete button here** (deletion lives in Settings, per design decision).
 
-- [ ] **Step 1: Implement.** Client page that:
-  - `upload-form.tsx`: file input (accept `.mp4,.mov,.mkv`) + language select (`th`/`en`) + "หรือวาง path ไฟล์ในเครื่อง" text input. File mode: `XMLHttpRequest` POST multipart to `${API_BASE}/videos` to get `upload.onprogress` → shadcn `<Progress>`; path mode: `api.videos.post({ path, language })`.
-  - `video-list.tsx`: table of videos (filename, status badge, duration mm:ss, clip count, created date) with per-row: link to `/videos/[id]`, Retry button when `status==='failed'` (`retry.post()`), Delete button with confirm dialog (disabled while `processing`).
-  - `page.tsx` composes both; refetches list on any `useEvents` message of type `video:update`, `job:update`, `$reconnect`.
-- [ ] **Step 2: Verify manually** — with server running: upload a small mp4 (any short screen recording), watch it appear with status; delete works; path-mode ingest works with an absolute path.
-- [ ] **Step 3: Commit** — `git commit -am "feat(web): library page with dual-mode upload"`
+- [ ] **Step 1: `upload-zone.tsx`** — dashed dropzone card per design:
+  - Language segmented toggle ไทย/EN (state `language: 'th'|'en'`)
+  - "เลือกไฟล์" (accent button) → hidden `<input type=file accept=".mp4,.mov,.mkv">` → XHR POST multipart with `upload.onprogress`; while uploading swap the card for the progress variant (filename, %, 6px accent bar, hint "กำลังอัปโหลด… เสร็จแล้วจะเข้าคิวประมวลผลอัตโนมัติ (ภาษา: …)")
+  - "ใช้ path ในเครื่อง" (outline button) → inline text input + ยืนยัน → `api.videos.post({ path, language })`; render the 400 "file not found" message inline
+  - Drag-and-drop onto the zone = same as file pick
+- [ ] **Step 2: `video-row.tsx` + `page.tsx`** — rows per design:
+  - Thumbnail block 112×63 (neutral gradient + duration badge; no real poster in MVP), filename, meta line (duration · ภาษา · uploaded date; append error text when failed)
+  - Clip count (`n คลิป` or `—`), status chip: processing → spinner + "ถอดเสียง n%" (live from `step:update` events with `name==='transcribe'`), queued steps show step name; ready → ✓ พร้อมใช้งาน (green); failed → ล้มเหลว (red) + "ลองใหม่" outline button
+  - Row click → `/videos/[id]` (disabled while failed)
+  - Header: "คลังวิดีโอ", "n วิดีโอ · ทุกอย่างอยู่ในเครื่องของคุณ ไม่มีอะไรออกสู่อินเทอร์เน็ต"
+  - Refetch list on `video:update`, `job:update`, `$reconnect`
+- [ ] **Step 3: Verify manually** — upload small mp4 → row appears, chip animates through steps via SSE; path-mode works; failed video shows retry.
+- [ ] **Step 4: Commit** — `git commit -am "feat(web): library page per design"`
 
 ---
 
-### Task 15: apps/web — Workspace: processing view, candidates, clip creation
+### Task 15: apps/web — Workspace: processing view, timeline, candidates, clip strip
 
 **Files:**
-- Create: `apps/web/app/videos/[id]/page.tsx`, `apps/web/components/processing-steps.tsx`, `apps/web/components/candidate-list.tsx`, `apps/web/components/clip-strip.tsx`, `apps/web/lib/format.ts`
+- Create: `apps/web/app/videos/[id]/page.tsx`, `apps/web/components/processing-view.tsx`, `apps/web/components/timeline.tsx`, `apps/web/components/candidate-panel.tsx`, `apps/web/components/clip-strip.tsx`
+- Modify: `apps/server/src/routes/videos.ts` — add `GET /videos/:id/thumb/:file` → `Bun.file(join(videoDir(id),'thumbs',file))` with guard `basename(file)===file`, 404 if missing
 
 **Interfaces:**
-- Consumes: `api.videos({ id }).get()` (returns `{ video, job: { …, steps: [...] }, candidatesCount }`), `api.videos({ id }).candidates.get()`, `api.videos({ id }).clips.get()`, `api.videos({ id }).clips.post({ candidateId } | { start, end })`, `POST /jobs/:id/cancel`.
-- Produces (used by Task 16): page holds `selectedClipId` state; renders `<ClipEditor clipId={...} video={...} />` when set (component from Task 16 — until then render a placeholder `<div>`).
+- Consumes: `api.videos({ id }).get()` (video + latest job with steps), `.candidates.get()`, `.clips.get()`, `.clips.post(...)`, `api.jobs({ id }).cancel.post()`, `useEvents`, `fmtTime`.
+- Produces (used by Task 16): page state `{ selClipId: string|null, exportSel: Record<string,boolean>, playhead: number }`; `<Timeline onCreateRange={(start,end)=>...}>`; right panel renders `<CandidatePanel>` when `selClipId===null`, else Task 16's `<ClipEditor>` (placeholder div until Task 16).
+- Design: Workspace top bar (← คลังวิดีโอ, name, duration, ยกเลิกงาน when processing); processing screen; editor screen left column + right panel.
 
-- [ ] **Step 1: Implement.**
-  - `processing-steps.tsx`: ordered list of the 6 step names with status icons (pending ○ / running spinner + progress % when the SSE `step:update` carries `progress` / done ✓ / failed ✕ + error text), Cancel button → `api.jobs({ id: jobId }).cancel.post()`.
-  - `candidate-list.tsx`: cards sorted by score — thumbnail `<img src={`${API_BASE}/videos/${id}/thumbs/…`}>` (serve thumbs via the stream route's sibling: add tiny `GET /videos/:id/thumb/:file` static handler in this task server-side — Modify `apps/server/src/routes/videos.ts`, return `Bun.file(join(videoDir(id),'thumbs',file))` with path traversal guard `basename(file)===file`), score badge, time range, "ใช้คลิปนี้" button → `clips.post({ candidateId })`.
-  - `clip-strip.tsx`: horizontal strip of created clips (thumbnail, range, selected highlight, delete ×).
-  - `page.tsx`: if video.status `processing|uploaded` → processing view; if `failed` → error + retry; if `ready` → grid: left `<video>` player (`src=${API_BASE}/videos/${id}/stream`) + "สร้าง clip จากช่วงนี้" (two number inputs start/end prefilled from player `currentTime` + a "set from player" button each) ; right candidates; bottom clip strip. Refetch on relevant SSE events + `$reconnect`.
-- [ ] **Step 2: Verify manually** — process a real short video end-to-end (needs ffmpeg+whisper installed and a model downloaded; use `tiny` model via settings for speed): steps animate live, candidates appear with thumbnails, clicking creates clips.
-- [ ] **Step 3: Commit** — `git commit -am "feat(web): workspace with live processing and candidate selection"`
+- [ ] **Step 1: `processing-view.tsx`** — per design:
+  - Centered column: heading "กำลังประมวลผลวิดีโอ" + subtitle "ปิดหน้านี้ได้เลย งานรันต่อเบื้องหลัง…"
+  - Card with the 6 steps — Thai labels: แปลงไฟล์วิดีโอ / แยกเสียง / ถอดเสียง / ตรวจจับฉาก / ค้นหา hook / สร้างภาพตัวอย่าง, desc line each (e.g. "whisper large-v3 · Metal GPU", "scene detection · threshold 0.3"); states: done = accent circle ✓ (pop animation), running = spinner, pending = hollow circle + dim text, failed = red ✕ + error text
+  - Transcribe running → 5px progress bar + mono label "`n% · segment ล่าสุด H:MM:SS / H:MM:SS · resume ได้ถ้าหลุด`" (from `step:update` `progress`/`time`)
+  - **Live transcript feed**: "ถอดเสียงล่าสุด" + last 3 `{time, text}` from `step:update` events carrying `text` (fadeUp animation)
+  - Cancel button in workspace top bar → `api.jobs({ id: jobId }).cancel.post()`
+- [ ] **Step 2: `timeline.tsx`** — 44px track per design:
+  - Candidate bars: `left = start/duration*100%`, `width = (end-start)/duration*100%` (min-width 5px), color by score: `>=70` accent, `>=50` warn `#d9a13f`, else `#7a746b`; click → seek player
+  - White 2px playhead synced to `<video>.currentTime`
+  - **Drag-to-create**: `onMouseDown` records anchor `t = offsetX/width*duration`; `mousemove` renders a translucent accent selection block; `mouseup` (span ≥ 2s) shows floating confirm button "สร้าง clip จากช่วงนี้ H:MM:SS – H:MM:SS" → `clips.post({ start, end })`; Escape/click-away cancels
+  ```tsx
+  const toTime = (clientX: number) => {
+    const r = trackRef.current!.getBoundingClientRect()
+    return Math.max(0, Math.min(duration, (clientX - r.left) / r.width * duration))
+  }
+  ```
+  - Footer row `0:00:00` … total duration (mono, faint)
+- [ ] **Step 3: `candidate-panel.tsx`** — right panel (360px) per design:
+  - Header "Candidates" + "n ช่วงที่น่าตัด · เรียงตามคะแนน"
+  - Rows: rank `#n`, thumb 78×44 (`/videos/:id/thumb/<candidateId>.jpg`), mono range, duration, score pill (colored as timeline), `＋` accept button → `clips.post({ candidateId })`; accepted → green ✓ tile + row dimmed (match by clips' `candidateId`)
+  - Row click → seek player to `start`
+  - Footer hint: "ลากช่วงเวลาบน timeline เพื่อสร้างคลิปเองก็ได้"
+- [ ] **Step 4: `clip-strip.tsx` + `page.tsx`** — "คลิปของฉัน" strip per design: 198px cards (thumb `/videos/:id/thumb/<clipId>.jpg` fallback gradient, checkbox top-left toggles `exportSel`, duration badge, mono range, "คะแนน n · m subtitle"), border accent when selected; click selects → right panel becomes editor. Page assembles: player `<video src=${API_BASE}/videos/${id}/stream>` (mono overlay `source.mp4 · WxH · current time`), timeline, strip, right panel; SSE refetch wiring (`step:update`, `video:update`, `$reconnect`).
+- [ ] **Step 5: Verify manually** — process a real short video (model `tiny` via API for speed): steps + feed animate; candidates appear; accept → clip in strip; drag on timeline creates a manual clip; cancel works mid-transcribe.
+- [ ] **Step 6: Commit** — `git commit -am "feat(web): workspace with live processing, timeline drag-create, candidates"`
 
 ---
 
-### Task 16: apps/web — clip editor (preview clamp, trim, crop offset, subtitle editor) + export bar
+### Task 16: apps/web — clip editor panel + export bar + exports list
 
 **Files:**
-- Create: `apps/web/components/clip-editor.tsx`, `apps/web/components/subtitle-editor.tsx`, `apps/web/components/export-bar.tsx`; Modify: `apps/web/app/videos/[id]/page.tsx` (mount real components)
+- Create: `apps/web/components/clip-editor.tsx`, `apps/web/components/export-bar.tsx`, `apps/web/components/export-list.tsx`
+- Modify: `apps/web/app/videos/[id]/page.tsx` (mount real components); `apps/server/src/routes/exports.ts` — add `GET /videos/:id/exports` (exports joined through the video's clips, newest first)
 
 **Interfaces:**
-- Consumes: `api.clips({ id }).patch(...)`, `api.clips({ id }).subtitles.get()/put()`, `${API_BASE}/clips/:id/srt`, `api.exports.post({ clipIds, aspect, burnSubtitles })`, `${API_BASE}/exports/:id/download`, export rows via new `GET /videos/:id/exports` (Modify `apps/server/src/routes/exports.ts`: list exports joined through the video's clips — add in this task).
+- Consumes: `api.clips({ id }).patch()`, `.subtitles.get()/put()`, `${API_BASE}/clips/:id/srt`, `api.exports.post({ clipIds, aspect, burnSubtitles })`, `${API_BASE}/exports/:id/download`, `api.exports({ id }).delete()`, `export:update` SSE events.
+- Design: "แก้ไขคลิป" right-panel state + export bar row + export rows.
 
-- [ ] **Step 1: `clip-editor.tsx`.**
-  - Preview clamp: `<video>` with `onLoadedMetadata`/effect setting `currentTime = clip.start`; `onTimeUpdate` → if `currentTime >= clip.end` then `pause()` + `currentTime = clip.start`. Play button starts from `clip.start`.
-  - Trim: two `<Slider>` rows (start, end) bounded `[max(0, clip.start-30), min(duration, clip.end+30)]`, step 0.1, with the covered transcript text shown under the sliders (from subtitles fetched for clip); "บันทึก trim" → `patch({ start, end })` then refetch subtitles (extend may add rows).
-  - Crop offset: `<Slider min={-1} max={1} step={0.05}>`; live preview via a 9:16 overlay box on the video: absolutely-positioned border whose horizontal position = `(1+offset)/2 * (containerWidth - overlayWidth)` where `overlayWidth = containerHeight * 9/16`; save via `patch({ cropOffset })`.
-- [ ] **Step 2: `subtitle-editor.tsx`** — table of rows (start, end, text inputs; times as seconds with 0.1 step), edit locally, "บันทึก subtitle" → `subtitles.put({ subtitles: rows })`, "ดาวน์โหลด .srt" → anchor to srt URL.
-- [ ] **Step 3: `export-bar.tsx`** — clip multi-select checkboxes (from clip strip selection state lifted to page), aspect `<Select>` (`9:16` default/`16:9`/`original`), burn-subtitles toggle, "Export" → `api.exports.post(...)`; list of this video's exports with status (live via `export:update` SSE) and Download/Delete buttons.
-- [ ] **Step 4: Verify manually** — trim a clip (watch preview clamp follow), edit a subtitle line, export 9:16 with subtitles; play the downloaded mp4: crop offset applied, Thai subtitles render correctly (no floating vowels), audio level consistent.
-- [ ] **Step 5: Commit** — `git commit -am "feat(web): clip editor with trim, crop offset, subtitles, export"`
+- [ ] **Step 1: `clip-editor.tsx`** — per design, replaces candidate panel when a clip is selected:
+  - Header: "แก้ไขคลิป `H:MM:SS – H:MM:SS`" + ✕ close (→ back to candidates)
+  - **Trim**: two boxes เริ่ม/จบ with ‹ › steppers — click ±1.0s, Shift-click ±0.1s; clamp `start ≤ end-2`; debounce 400ms → `patch({ start, end })` then refetch subtitles (extend may add rows); footer "ความยาว n วินาที · ขยายช่วงแล้ว subtitle เดิมที่แก้ไว้ไม่หาย"
+  - **Crop 9:16**: label row (ตำแหน่งครอป 9:16 + live value กลาง/ซ้าย n%/ขวา n%), `<input type=range min=-100 max=100>` → `patch({ cropOffset: v/100 })`; drives the player overlay: a 9:16 bordered box, horizontal position `left = calc(50% + offset*maxShift)` where `maxShift = (containerW - overlayW)/2` px, overlay `W = containerH*9/16` — measured from the actual video box, not the design's approximation
+  - **Subtitle editor**: header "SUBTITLE (n)" + "↓ ดาวน์โหลด .srt" link; rows: mono time line — **click time → two number inputs (start/end, step 0.1) appear** (spec requires editable times; extension over the design's read-only label) — and borderless text input per design; "บันทึก" appears when dirty → `subtitles.put({ subtitles: rows })`
+  - "ลบคลิปนี้" danger-outline button → confirm → `api.clips({ id }).delete()` → close panel
+- [ ] **Step 2: `export-bar.tsx`** — per design row: "Export · เลือกแล้ว n คลิป", aspect segmented control (9:16 / 16:9 / ต้นฉบับ → `'9:16'|'16:9'|'original'`), ฝัง subtitle pill toggle, accent button "Export n คลิป" (40% opacity + disabled when none checked) → `api.exports.post({ clipIds: checkedIds, aspect, burnSubtitles })`
+- [ ] **Step 3: `export-list.tsx`** — rows per design: status icon (spinner / green ✓ pop), mono label "คลิป H:MM:SS", detail "9:16 · ฝัง subtitle · loudnorm 2-pass", progress bar (`rendering` → accent indeterminate creep, `done` → green 100%), right side: % while busy, "↓ ดาวน์โหลด" when done (+ ลบ on hover); live via `export:update`, refetch on `$reconnect`
+- [ ] **Step 4: Verify manually** — trim with steppers (preview clamp follows), shift-click fine step, crop slider moves overlay and survives reload, edit subtitle text + time, export 2 clips 9:16 burn-in → download plays with correct crop/Thai subs/loudness; export ต้นฉบับ unchanged aspect.
+- [ ] **Step 5: Commit** — `git commit -am "feat(web): clip editor, export bar and live export list"`
 
 ---
 
-### Task 17: apps/web — settings page, docs, final E2E pass
+### Task 17: apps/web — Settings + Setup screens, README, final E2E
 
 **Files:**
-- Create: `apps/web/app/settings/page.tsx`, `README.md`; Modify: root `package.json` (add `"postinstall"` note — none needed; verify scripts)
+- Create: `apps/web/app/settings/page.tsx`, `apps/web/app/setup/page.tsx`, `README.md`
 
 **Interfaces:**
-- Consumes: `api.system.doctor.get()`, `api.settings.get()/put()`, `api.system['disk-usage'].get()`, `api.system.model.download.post()`, `model:download` SSE events.
+- Consumes: `api.system.doctor.get()`, `api.settings.get()/put()`, `api.system['disk-usage'].get()`, `api.system.model.download.post()`, `api.videos({ id }).delete()`, `api.exports({ id }).delete()`, `model:download` SSE events.
+- Design: Settings + Setup screens.
 
-- [ ] **Step 1: Settings page** — doctor card (✓/✕ per binary with `brew install ffmpeg whisper-cpp` hint when missing, acceleration line); model select (`tiny`/`base`/`small`/`medium`/`large-v3` with speed/accuracy hint text per spec) + download button with progress bar; disk usage table (per video, bytes → human size) with delete buttons.
-- [ ] **Step 2: README.md** — prerequisites (`brew install ffmpeg whisper-cpp`), `bun install`, `bun dev`, first-run flow (settings → download model), where data lives (`data/`), everything binds localhost only.
-- [ ] **Step 3: Full E2E checklist (manual, real binaries):**
-  1. Fresh clone sim: `rm -rf data && bun install && bun dev` → doctor red on model → download `tiny` → green
-  2. Ingest a ~2-min Thai clip via path mode → all 6 steps run → candidates with thumbnails
-  3. Kill server mid-transcribe → restart → video failed → Retry → transcribe resumes (log shows `-ot` offset), pipeline completes
-  4. Create clip from candidate + one manual clip → trim both directions → subtitle edit survives extend
-  5. Export batch (both clips, 9:16, subtitles on) → files play, subs correct, loudness normalized
-  6. Cancel: start re-process, cancel mid-transcribe → job canceled, no `.tmp` files under `data/` (`find data -name '*.tmp*'` → empty)
-  7. Delete one export, delete one video → disk usage updates
-- [ ] **Step 4: Run all tests** — `bun test packages apps/server && bun run typecheck` → all green.
-- [ ] **Step 5: Commit** — `git commit -am "feat(web): settings page, README, MVP complete"`
+- [ ] **Step 1: Settings page** — three cards per design:
+  1. สถานะระบบ: 2-col grid — ffmpeg / ffprobe / whisper-cli / acceleration, each ✓ green or ✕ red + detail; "ดูหน้าติดตั้ง →" link to `/setup`
+  2. โมเดลถอดเสียง: two radio cards **large-v3** (3.1 GB · แม่นยำที่สุดสำหรับภาษาไทย — ค่าเริ่มต้นที่แนะนำ) and **medium** (1.5 GB · เร็วกว่า ~2–3 เท่า…); selecting → `settings.put({ whisperModel })`; per-card right side: "ดาวน์โหลดแล้ว" green pill / "↓ ดาวน์โหลด" button / progress bar+% while `model:download` events stream; footer note "ดาวน์โหลดต่อจากเดิมได้ถ้าหลุดกลางทาง (resume อัตโนมัติ)". (API accepts other model names — e.g. `tiny` for dev — UI intentionally shows only these two.)
+  3. พื้นที่ดิสก์: total line "รวม X ใน data/" + rows per video (name, proportion bar, size, ลบ button → confirm → `videos.delete()`; disabled while processing with tooltip) — **this is the only place videos are deleted** (design decision; library has no delete)
+- [ ] **Step 2: Setup page** — centered 520px card per design: logo, "ติดตั้ง ShotPrompt", checklist rows (ffmpeg·ffprobe with version; whisper-cli ✓/✕ "ไม่พบใน PATH"), brew command box + คัดลอก button (clipboard + "คัดลอกแล้ว ✓" 1.6s), model row with download button/progress, "ตรวจสอบอีกครั้ง" button (refetch doctor; becomes accent "เริ่มใช้งาน ShotPrompt →" when everything passes → router.push `/`), footnote "ตรวจจาก PATH ของเครื่อง · Apple Silicon ใช้ Metal GPU อัตโนมัติ". `AppShell` status chip links here when doctor fails.
+- [ ] **Step 3: README.md** — prerequisites (`brew install ffmpeg whisper-cpp`), `bun install`, `bun dev`, first-run (setup screen → download model), data lives in `data/`, localhost-only binding, design reference pointer.
+- [ ] **Step 4: Full E2E checklist (manual, real binaries):**
+  1. `rm -rf data && bun install && bun dev` → status chip red → `/setup` flow → download `tiny` (via `curl -X PUT .../settings` or temporary pick) → chip green
+  2. Ingest ~2-min Thai clip via path mode → 6 steps animate + live transcript feed shows Thai text → candidates with thumbnails
+  3. Kill server mid-transcribe → restart → failed → Retry → resumes from offset (server log shows `-ot`), completes
+  4. Accept 1 candidate + drag-create 1 manual clip → trim both directions → subtitle text+time edits survive extend
+  5. Export both clips 9:16 burn-in → files play: crop offset honored, Thai subs correct (no floating vowels), loudness normalized; export ต้นฉบับ keeps original aspect
+  6. Cancel mid-transcribe → canceled, `find data -name '*.tmp*'` → empty
+  7. Settings: delete one export + one video → disk usage updates; library never shows delete
+- [ ] **Step 5: Run all tests** — `bun test packages apps/server && bun run typecheck` → green.
+- [ ] **Step 6: Commit** — `git commit -am "feat(web): settings and setup screens per design, README, MVP complete"`
