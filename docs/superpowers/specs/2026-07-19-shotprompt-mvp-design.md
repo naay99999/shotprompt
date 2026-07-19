@@ -32,9 +32,9 @@ packages/db      Drizzle schema + bun:sqlite client
 ## Prerequisites & Doctor
 
 - **ffmpeg + whisper.cpp เป็น prerequisite** — ผู้ใช้ติดตั้งเองผ่าน `brew install ffmpeg whisper-cpp` เราไม่ bundle/ไม่ auto-download binary
-- `GET /system/doctor` เช็ค: เจอ `ffmpeg`/`ffprobe`/`whisper-cli` ใน PATH ไหม, whisper model ที่เลือกดาวน์โหลดแล้วยัง
+- `GET /system/doctor` เช็ค: เจอ `ffmpeg`/`ffprobe`/`whisper-cli` ใน PATH ไหม, whisper model ที่เลือกดาวน์โหลดแล้วยัง, **acceleration status** (brew whisper-cpp บน Apple Silicon build มาพร้อม Metal อยู่แล้ว — doctor แสดงว่า GPU ใช้งานได้ไหมจาก output ของ `whisper-cli` เพื่อให้รู้ว่าไม่ได้รันช้าโดยไม่จำเป็น; CUDA อยู่นอก scope)
 - UI: doctor ไม่ผ่าน → หน้า setup แสดงคำสั่งติดตั้ง + ปุ่มสั่งดาวน์โหลด model (server ดาวน์โหลดให้, progress ผ่าน SSE)
-- Model default: `large-v3` (แนะนำสำหรับไทย), เปลี่ยนได้ในหน้า settings
+- Model default: `large-v3` (แม่นสุดสำหรับไทย), เปลี่ยนได้ในหน้า settings — UI ระบุ trade-off ชัด: `medium` เร็วกว่า ~2-3 เท่า แลกความแม่นลงเล็กน้อย เหมาะกับวิดีโอ live ยาวหลายชั่วโมง
 
 ## Storage บน filesystem
 
@@ -46,10 +46,17 @@ data/
   models/                -- ggml-large-v3.bin ฯลฯ
   videos/<videoId>/
     source.mp4           -- ไฟล์ normalize แล้ว ใช้ทั้ง preview + export
-    audio.wav            -- 16kHz mono สำหรับ whisper
+    audio.wav            -- 16kHz mono สำหรับ whisper (ลบทิ้งเมื่อ pipeline จบ — ดูด้านล่าง)
     thumbs/<candidateId|clipId>.jpg
     exports/<exportId>.mp4
 ```
+
+### วินัยเรื่องพื้นที่ดิสก์
+
+- **ไฟล์ upload ดิบ** ลบทันทีหลัง `normalize` สำเร็จ
+- **`audio.wav`** ลบทันทีที่ pipeline จบสมบูรณ์ — step หลัง transcribe ไม่ใช้แล้ว ถ้าอนาคตต้อง re-transcribe ค่อย extract ใหม่ (เร็วมากเทียบกับ transcribe)
+- **Atomic write ทุก step:** ไฟล์ output ทุกตัว (source.mp4, exports, thumbnails) เขียนลงชื่อ `.tmp` ก่อนแล้ว rename เมื่อสำเร็จ → ตอน server start กวาดลบ `*.tmp` ใน `data/` ทั้งหมดได้อย่างปลอดภัย ไม่มีไฟล์ครึ่ง ๆ กลาง ๆ ค้างจาก crash
+- **ลบ export รายตัวได้** (`DELETE /exports/:id`) และหน้า settings แสดง disk usage ของ `data/` แยกราย video + ปุ่มลบ video (ซึ่งลบไฟล์ทั้ง folder)
 
 ## Pipeline
 
@@ -82,13 +89,18 @@ pipeline → candidates (read-only, เรียงตาม score)
 - In-process queue 2 ตัว: `pipeline` (concurrency 1 — whisper กิน CPU เต็มเครื่อง) และ `export` (concurrency 1) — แยกกันเพื่อให้ export ไม่ต้องรอ pipeline job ยาว ๆ
 - Job state persist ลง SQLite: `jobs` (1 run/แถว) + `job_steps` (สถานะราย step) — ตารางเดียวกับที่ UI ใช้แสดง ordered step list
 - ทุก step เขียน output ลง DB/ไฟล์ทันทีที่จบ
-- Server start: job ค้าง `running` → mark `failed`
+- Server start: job ค้าง `running` → mark `failed` + กวาดลบไฟล์ `*.tmp` ทั้งหมด (ดู "วินัยเรื่องพื้นที่ดิสก์")
 - **Retry = job ใหม่ที่ข้าม step ที่ done แล้ว** (เช็คจาก `job_steps` ของ job ก่อนหน้า + artifact มีจริง) — crash หลัง transcribe ไม่ต้อง transcribe ซ้ำ
 - Queue interface สะอาด (enqueue/on-progress) — อนาคตเปลี่ยน backend ได้โดยไม่แตะ caller
 
 ## SSE
 
 Endpoint เดียว `GET /events` stream ทุก event: job step change, export status, model download progress — UI refresh แล้ว state คืนจาก REST ได้เสมอ (SSE เป็นแค่ตัวกระตุ้น refetch/อัปเดตสด ไม่ใช่ source of truth)
+
+Pipeline รันเป็นชั่วโมง connection หลุดได้แน่นอน — กติกาฝั่ง web:
+
+- ใช้ `EventSource` (auto-reconnect ในตัว) + server ส่ง heartbeat comment ทุก ~15s กัน proxy/idle timeout
+- **ทุกครั้งที่ reconnect สำเร็จ ให้ refetch state จาก REST ทันที** — event ที่หลุดหายระหว่างขาดจึงไม่มีผล เพราะ event ไม่ใช่ source of truth
 
 ## Data Model
 
@@ -124,6 +136,8 @@ settings        key, value                          -- whisper model size ฯล
 | `GET /clips/:id/srt` | ดาวน์โหลด .srt (เวลา relative กับ clip) |
 | `POST /exports` | `{clipIds[], aspect, burnSubtitles}` — batch ในตัว (1 export row/clip เข้าคิว export) |
 | `GET /exports/:id/download` | ไฟล์ mp4 |
+| `DELETE /exports/:id` | ลบไฟล์ export ที่ไม่ใช้แล้ว (คืนพื้นที่ดิสก์) |
+| `GET /system/disk-usage` | ขนาด `data/` รวม + แยกราย video (แสดงในหน้า settings) |
 | `GET /system/doctor` | เช็ค binaries + model |
 | `POST /system/model/download` | สั่งดาวน์โหลด whisper model |
 | `GET /settings` · `PUT /settings` | ค่า config (model size ฯลฯ) |
@@ -149,7 +163,7 @@ Export ซ้ำด้วยค่าใหม่ได้ไม่จำกั�
    - เลือก clip → panel: trim (ลาก start/end, เห็น transcript segments ประกอบ), crop offset slider พร้อมกรอบ 9:16 ทาบบน preview, subtitle editor (แก้ text/เวลา รายการต่อ segment), export
    - Export bar: เลือกหลาย clip + aspect + burn sub → สั่งรวดเดียว, สถานะผ่าน SSE, ปุ่มดาวน์โหลดเมื่อเสร็จ
    - Preview เล่นจาก `/videos/:id/stream` โดย JS บังคับช่วง start/end — ไม่ render ก่อน preview
-3. **`/settings`** — doctor status, ดาวน์โหลด/เลือกขนาด model
+3. **`/settings`** — doctor status (รวม acceleration), ดาวน์โหลด/เลือกขนาด model (บอก trade-off เร็ว-แม่น), disk usage ราย video + ลบ export/video เพื่อคืนพื้นที่
 
 ## Testing
 
