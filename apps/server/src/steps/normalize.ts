@@ -25,8 +25,15 @@ export async function run(db: DB, videoId: string, ctx: JobCtx) {
   // output format" (verified locally). This matches the naming convention
   // documented in recovery.ts's sweep comment (`<final>.tmp.mp4`), and the
   // sweep's `f.name.includes('.tmp')` check still matches this filename.
-  await runCmd('ffmpeg', buildNormalizeArgs(v.path, tmp, needsTranscode(probe)), ctx)
-  await renameTmp(tmp, out)
+  try {
+    await runCmd('ffmpeg', buildNormalizeArgs(v.path, tmp, needsTranscode(probe)), ctx)
+    await renameTmp(tmp, out)
+  } catch (e) {
+    // Cancellation (or any other failure) can leave a partial ffmpeg output behind —
+    // clean it up immediately rather than waiting for the next server-restart sweep.
+    if (existsSync(tmp)) rmSync(tmp, { force: true })
+    throw e
+  }
   if (v.path !== out) rmSync(v.path, { force: true }) // delete raw upload
   db.update(videos).set({ path: out, duration: probe.duration, width: probe.width, height: probe.height })
     .where(eq(videos.id, videoId)).run()

@@ -72,7 +72,7 @@ export function AppShell({
             คลังวิดีโอ
           </Link>
           <Link
-            href="/setup"
+            href="/settings"
             className={`rounded-lg px-3.5 py-1.5 text-[13.5px] transition-colors ${
               active === 'settings' ? 'bg-line2 text-ink' : 'text-muted hover:text-ink'
             }`}
@@ -88,7 +88,7 @@ export function AppShell({
           </div>
         ) : ready ? (
           <Link
-            href="/setup"
+            href="/settings"
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors hover:bg-line2"
           >
             <span className="h-[7px] w-[7px] animate-pulse rounded-full bg-ok" />

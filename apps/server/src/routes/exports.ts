@@ -1,7 +1,7 @@
 import { Elysia, status, t } from 'elysia'
 import { desc, eq, inArray } from 'drizzle-orm'
 import { basename, extname, join } from 'node:path'
-import { mkdirSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { clips, clipSubtitles, exportsTable, jobs, videos, type DB } from '@shotprompt/db'
 import { buildASS, buildExportArgs, buildLoudnormMeasureArgs, parseLoudnorm, type Aspect } from '@shotprompt/core'
 import type { Ctx } from '../context'
@@ -42,6 +42,10 @@ export function makeExportRunner(db: DB): JobRunner {
       throw e
     } finally {
       if (assPath) rmSync(assPath, { force: true })
+      // Cancellation (or any other failure) can leave the partial ffmpeg output
+      // behind — clean it up immediately rather than waiting for the next
+      // server-restart sweep. Only present when the export never reached `renameSync`.
+      if (existsSync(tmp)) rmSync(tmp, { force: true })
     }
   }
 }

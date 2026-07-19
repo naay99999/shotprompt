@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { count, eq } from 'drizzle-orm'
 import { segments, type DB } from '@shotprompt/db'
@@ -16,6 +16,13 @@ export function satisfied(db: DB, videoId: string): boolean {
 export async function run(db: DB, videoId: string, ctx: JobCtx) {
   const dir = videoDir(videoId)
   const out = join(dir, 'audio.wav'), tmp = out + '.tmp.wav' // keep .wav suffix for ffmpeg format detection; sweep matches *.tmp* — use '.tmp.wav' and sweep pattern includes it
-  await runCmd('ffmpeg', buildExtractAudioArgs(join(dir, 'source.mp4'), tmp), ctx)
-  await renameTmp(tmp, out)
+  try {
+    await runCmd('ffmpeg', buildExtractAudioArgs(join(dir, 'source.mp4'), tmp), ctx)
+    await renameTmp(tmp, out)
+  } catch (e) {
+    // Cancellation (or any other failure) can leave a partial ffmpeg output behind —
+    // clean it up immediately rather than waiting for the next server-restart sweep.
+    if (existsSync(tmp)) rmSync(tmp, { force: true })
+    throw e
+  }
 }
