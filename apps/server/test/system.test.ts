@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 import { createDb, seedKeywords } from '@shotprompt/db'
 import { createApp } from '../src/app'
+import { createCtx } from '../src/context'
 
-const app = () => { const db = createDb(':memory:'); seedKeywords(db); return createApp(db) }
+const app = () => { const db = createDb(':memory:'); seedKeywords(db); return createApp(createCtx(db, { autoRun: false })) }
 
 describe('system routes', () => {
   it('doctor reports binary and model status', async () => {
