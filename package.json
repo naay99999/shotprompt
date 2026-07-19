@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bunx concurrently -k -n server,web \"bun run --cwd apps/server dev\" \"bun run --cwd apps/web dev\"",
     "test": "bun test packages apps/server",
-    "typecheck": "bunx tsc -b packages/core packages/db apps/server"
+    "typecheck": "bunx tsc -b packages/core packages/db apps/server && bunx tsc --noEmit -p apps/web"
   },
   "devDependencies": {
     "bun-types": "latest",
