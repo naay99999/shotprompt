@@ -1,0 +1,12 @@
+{
+  "name": "@shotprompt/server",
+  "type": "module",
+  "exports": { ".": "./src/app.ts" },
+  "scripts": { "dev": "bun run --watch src/index.ts" },
+  "dependencies": {
+    "@shotprompt/core": "workspace:*",
+    "@shotprompt/db": "workspace:*",
+    "elysia": "^1.1.0",
+    "@elysiajs/cors": "^1.1.0"
+  }
+}

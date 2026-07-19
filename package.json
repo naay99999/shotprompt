@@ -1,0 +1,15 @@
+{
+  "name": "shotprompt",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "bunx concurrently -k -n server,web \"bun run --cwd apps/server dev\" \"bun run --cwd apps/web dev\"",
+    "test": "bun test packages apps/server",
+    "typecheck": "bunx tsc -b packages/core packages/db apps/server"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.6.0"
+  }
+}

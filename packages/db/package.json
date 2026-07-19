@@ -1,0 +1,6 @@
+{
+  "name": "@shotprompt/db",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@shotprompt/core": "workspace:*", "drizzle-orm": "^0.36.0" }
+}
