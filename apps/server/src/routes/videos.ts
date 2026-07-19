@@ -105,6 +105,13 @@ export const videoRoutes = (ctx: Ctx) => new Elysia()
     ctx.pipelineQueue.enqueue(jobId)
     return { jobId }
   })
+  .get('/videos/:id/thumb/:file', ({ params }) => {
+    const { file } = params
+    if (basename(file) !== file) return status(400, { message: 'invalid file' })
+    const path = join(videoDir(params.id), 'thumbs', file)
+    if (!existsSync(path)) return status(404, { message: 'not found' })
+    return Bun.file(path)
+  })
   .get('/videos/:id/stream', ({ params, set }) => {
     const v = ctx.db.select().from(videos).where(eq(videos.id, params.id)).get()
     if (!v) return status(404, { message: 'not found' })
