@@ -1,10 +1,10 @@
 import { Elysia, t } from 'elysia'
-import { existsSync, readdirSync, statSync } from 'node:fs'
+import { createWriteStream, existsSync, readdirSync, renameSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DB } from '@shotprompt/db'
 import { videos } from '@shotprompt/db'
 import { DATA_DIR, getSetting, modelPath, setSetting, videoDir } from '../env'
-import { sseResponse } from '../events'
+import { emitEvent, sseResponse } from '../events'
 
 const dirSize = (dir: string): number => {
   if (!existsSync(dir)) return 0
@@ -14,6 +14,31 @@ const dirSize = (dir: string): number => {
   }
   return total
 }
+
+export async function downloadModel(
+  url: string, dest: string,
+  onProgress: (received: number, total: number) => void,
+): Promise<void> {
+  const tmp = dest + '.tmp.bin'
+  let received = existsSync(tmp) ? statSync(tmp).size : 0
+  const res = await fetch(url, { headers: received > 0 ? { range: `bytes=${received}-` } : {} })
+  if (!res.ok || !res.body) throw new Error(`download failed: ${res.status}`)
+  if (received > 0 && res.status !== 206) received = 0 // server ignored Range → restart
+  const total = received + Number(res.headers.get('content-length') ?? 0)
+  const out = createWriteStream(tmp, { flags: received > 0 ? 'a' : 'w' })
+  let lastEmit = 0
+  for await (const chunk of res.body) {
+    out.write(chunk)
+    received += chunk.length
+    if (Date.now() - lastEmit > 1000) { lastEmit = Date.now(); onProgress(received, total) }
+  }
+  await new Promise<void>((resolve, reject) => out.end((e: unknown) => e ? reject(e) : resolve()))
+  renameSync(tmp, dest)
+  onProgress(received, total)
+}
+
+const hfUrl = (m: string) => `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${m}.bin`
+const downloading = new Set<string>()
 
 export const systemRoutes = (db: DB) => new Elysia()
   .get('/system/doctor', () => {
@@ -36,3 +61,20 @@ export const systemRoutes = (db: DB) => new Elysia()
     return { ok: true }
   }, { body: t.Object({ whisperModel: t.Optional(t.String()) }) })
   .get('/events', () => sseResponse())
+  .post('/system/model/download', ({ set, body }) => {
+    const model = body.model
+    if (existsSync(modelPath(model)) || downloading.has(model)) {
+      set.status = 409
+      return { error: 'already downloading or already downloaded' }
+    }
+    downloading.add(model)
+    downloadModel(
+      hfUrl(model),
+      modelPath(model),
+      (received, total) => emitEvent('model:download', { model, received, total, done: false }),
+    )
+      .then(() => emitEvent('model:download', { model, done: true }))
+      .catch(e => emitEvent('model:download', { model, error: String(e), done: true }))
+      .finally(() => downloading.delete(model))
+    return { started: true }
+  }, { body: t.Object({ model: t.String() }) })
