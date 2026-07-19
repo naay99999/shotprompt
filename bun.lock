@@ -16,6 +16,7 @@
         "@elysiajs/cors": "^1.1.0",
         "@shotprompt/core": "workspace:*",
         "@shotprompt/db": "workspace:*",
+        "drizzle-orm": "^0.36.0",
         "elysia": "^1.1.0",
       },
     },
