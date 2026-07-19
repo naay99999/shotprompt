@@ -5,7 +5,10 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppShell } from '@/components/app-shell'
 import { CandidatePanel, type Candidate, type ClipRef } from '@/components/candidate-panel'
+import { ClipEditor } from '@/components/clip-editor'
 import { ClipStrip, type Clip } from '@/components/clip-strip'
+import { ExportBar } from '@/components/export-bar'
+import { ExportList } from '@/components/export-list'
 import { ProcessingView, type Job } from '@/components/processing-view'
 import { Timeline } from '@/components/timeline'
 import { api, API_BASE } from '@/lib/api'
@@ -38,8 +41,10 @@ export default function WorkspacePage() {
   const [currentTime, setCurrentTime] = useState(0)
   const [canceling, setCanceling] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [exportsTick, setExportsTick] = useState(0)
 
   const videoRef = useRef<HTMLVideoElement>(null)
+  const videoContainerRef = useRef<HTMLDivElement>(null)
 
   const refetchAll = useCallback(() => {
     Promise.all([
@@ -124,6 +129,7 @@ export default function WorkspacePage() {
   const isFailed = video.status === 'failed'
   const isReady = video.status === 'ready'
   const duration = video.duration ?? 0
+  const selectedClip = clips.find(c => c.id === selectedClipId) ?? null
 
   return (
     <AppShell active="library">
@@ -172,7 +178,7 @@ export default function WorkspacePage() {
         {isReady && (
           <div className="flex min-h-0 flex-1 gap-[18px] px-[22px] py-[18px]">
             <div className="flex min-w-0 flex-1 flex-col gap-3.5 overflow-y-auto pr-0.5">
-              <div className="relative flex-none overflow-hidden rounded-2xl bg-black">
+              <div ref={videoContainerRef} className="relative flex-none overflow-hidden rounded-2xl bg-black">
                 <video
                   ref={videoRef}
                   src={`${API_BASE}/videos/${id}/stream`}
@@ -202,9 +208,17 @@ export default function WorkspacePage() {
                 onSelect={cid => setSelectedClipId(cid)}
                 onToggleExport={toggleExport}
               />
+
+              <ExportBar
+                clips={clips}
+                exportSel={exportSel}
+                onExported={() => setExportsTick(t => t + 1)}
+              />
+
+              <ExportList videoId={id} clips={clips} refreshKey={exportsTick} />
             </div>
 
-            {selectedClipId === null ? (
+            {selectedClipId === null || !selectedClip ? (
               <CandidatePanel
                 videoId={id}
                 candidates={candidates}
@@ -213,21 +227,19 @@ export default function WorkspacePage() {
                 onAccepted={refetchAll}
               />
             ) : (
-              <div className="flex w-[360px] flex-none flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-                <div className="flex items-center justify-between border-b border-line px-[18px] py-3.5">
-                  <div className="text-[14.5px] font-bold">แก้ไขคลิป</div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedClipId(null)}
-                    className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-[13px] text-dim transition-colors hover:bg-line2 hover:text-ink"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="flex flex-1 items-center justify-center px-6 text-center text-[12.5px] text-faint">
-                  ตัวแก้ไขคลิป (trim, crop, subtitle) มาใน task ถัดไป
-                </div>
-              </div>
+              <ClipEditor
+                key={selectedClip.id}
+                videoId={id}
+                clip={selectedClip}
+                duration={duration}
+                videoContainerRef={videoContainerRef}
+                onClose={() => setSelectedClipId(null)}
+                onUpdated={refetchAll}
+                onDeleted={() => {
+                  setSelectedClipId(null)
+                  refetchAll()
+                }}
+              />
             )}
           </div>
         )}

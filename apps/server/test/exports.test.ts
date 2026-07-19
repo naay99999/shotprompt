@@ -27,3 +27,20 @@ it('download 409s while not done', async () => {
   const res = await app.handle(new Request('http://x/exports/e1/download'))
   expect(res.status).toBe(409)
 })
+
+it('GET /videos/:id/exports lists exports for the video\'s clips, newest first', async () => {
+  const { app, db } = makeApp()
+  db.insert(exportsTable).values({ id: 'e1', clipId: 'cl1', aspect: '9:16', burnSubtitles: false, status: 'done', createdAt: 1 }).run()
+  db.insert(exportsTable).values({ id: 'e2', clipId: 'cl1', aspect: '16:9', burnSubtitles: true, status: 'queued', createdAt: 2 }).run()
+  const res = await app.handle(new Request('http://x/videos/v1/exports'))
+  expect(res.status).toBe(200)
+  const rows = await res.json() as { id: string }[]
+  expect(rows.map(r => r.id)).toEqual(['e2', 'e1'])
+})
+
+it('GET /videos/:id/exports returns an empty array for a video with no clips', async () => {
+  const { app } = makeApp()
+  const res = await app.handle(new Request('http://x/videos/nope/exports'))
+  expect(res.status).toBe(200)
+  expect(await res.json()).toEqual([])
+})

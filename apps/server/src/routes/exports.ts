@@ -1,5 +1,5 @@
 import { Elysia, status, t } from 'elysia'
-import { eq } from 'drizzle-orm'
+import { desc, eq, inArray } from 'drizzle-orm'
 import { basename, extname, join } from 'node:path'
 import { mkdirSync, renameSync, rmSync } from 'node:fs'
 import { clips, clipSubtitles, exportsTable, jobs, videos, type DB } from '@shotprompt/db'
@@ -47,6 +47,11 @@ export function makeExportRunner(db: DB): JobRunner {
 }
 
 export const exportRoutes = (ctx: Ctx) => new Elysia()
+  .get('/videos/:id/exports', ({ params }) => {
+    const clipIds = ctx.db.select({ id: clips.id }).from(clips).where(eq(clips.videoId, params.id)).all().map(c => c.id)
+    if (!clipIds.length) return []
+    return ctx.db.select().from(exportsTable).where(inArray(exportsTable.clipId, clipIds)).orderBy(desc(exportsTable.createdAt)).all()
+  })
   .post('/exports', ({ body }) => {
     const { clipIds, aspect, burnSubtitles } = body
     const rows = clipIds.map(id => ctx.db.select().from(clips).where(eq(clips.id, id)).get())
