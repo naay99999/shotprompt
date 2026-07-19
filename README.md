@@ -62,16 +62,18 @@ This starts both the API server (`127.0.0.1:3001`) and the web app
 
 ### First run
 
-On first launch (or whenever a required binary/model is missing), the app redirects
-you to a **Setup** screen (`/setup`) that checks `ffmpeg`, `ffprobe`, `whisper-cli`,
-and the `libass` capability from your machine's `PATH`, shows the `brew install`
-command with a copy button, and lets you download the transcription model
-(`large-v3` by default, ~3.1 GB — resumable if the download drops mid-way). Once
-`ffmpeg`/`ffprobe`/`whisper-cli` are found and the model is downloaded, the button
-becomes "เริ่มใช้งาน ShotPrompt →" and takes you into the app. (`libass` is checked and
-shown there and on the Settings page too, but — since the app is otherwise fully
-usable without subtitle burning — it does not block that transition; see the
-subtitle-burning caveat above.)
+On first launch (or whenever a required binary/model is missing), the app does **not**
+redirect you away — the Library page still renders normally underneath. Instead, the
+header shows a red status chip ("ต้องติดตั้งเพิ่ม") that links to a **Setup** screen
+(`/setup`), which checks `ffmpeg`, `ffprobe`, `whisper-cli`, and the `libass`
+capability from your machine's `PATH`, shows the `brew install` command with a copy
+button, and lets you download the transcription model (`large-v3` by default, ~3.1 GB
+— resumable if the download drops mid-way). Once `ffmpeg`/`ffprobe`/`whisper-cli` are
+found and the model is downloaded, the button becomes "เริ่มใช้งาน ShotPrompt →" and
+takes you into the app, and the header chip turns into a green "ระบบพร้อม" indicator.
+(`libass` is checked and shown there and on the Settings page too, but — since the app
+is otherwise fully usable without subtitle burning — it does not block that
+transition; see the subtitle-burning caveat above.)
 
 You can revisit these checks any time from **Settings** (`/settings`), which also
 lets you switch transcription models and manage disk usage (deleting videos/exports

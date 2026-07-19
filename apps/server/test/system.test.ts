@@ -82,4 +82,11 @@ describe('system routes', () => {
     const res = await app().handle(new Request('http://x/events'))
     expect(res.headers.get('content-type')).toContain('text/event-stream')
   })
+  it('rejects a model/download request whose model name looks like a path traversal attempt', async () => {
+    const res = await app().handle(new Request('http://x/system/model/download', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: '../../etc/passwd' }),
+    }))
+    expect(res.status).toBe(400)
+  })
 })

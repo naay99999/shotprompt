@@ -40,6 +40,12 @@ export async function downloadModel(
 const hfUrl = (m: string) => `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${m}.bin`
 const downloading = new Set<string>()
 
+// `model` gets interpolated straight into a filesystem path (`modelPath`) and a URL
+// (`hfUrl`) below — restrict it to characters real whisper model names actually use
+// (e.g. `large-v3`, `medium`, `tiny`) so a crafted value like `../../etc/passwd` can't
+// escape MODELS_DIR or redirect the download to an arbitrary host.
+const MODEL_NAME_PATTERN = /^[\w.-]+$/
+
 // The models the Settings/Setup UI lets a user pick between. The active model (from
 // settings, which could be something else entirely — e.g. `tiny` for local dev) is
 // always folded in too, so `doctor.models` never omits the one actually configured.
@@ -101,6 +107,10 @@ export const systemRoutes = (db: DB) => new Elysia()
   .get('/events', () => sseResponse())
   .post('/system/model/download', ({ set, body }) => {
     const model = body.model
+    if (!MODEL_NAME_PATTERN.test(model)) {
+      set.status = 400
+      return { error: 'invalid model name' }
+    }
     if (existsSync(modelPath(model)) || downloading.has(model)) {
       set.status = 409
       return { error: 'already downloading or already downloaded' }
