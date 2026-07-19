@@ -8,7 +8,9 @@ type Doctor = {
   ffmpeg: boolean
   ffprobe: boolean
   whisper: boolean
+  libass: boolean
   model: { name: string; downloaded: boolean }
+  models: { name: string; downloaded: boolean }[]
   acceleration: string
 }
 

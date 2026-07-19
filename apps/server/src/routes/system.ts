@@ -40,14 +40,52 @@ export async function downloadModel(
 const hfUrl = (m: string) => `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-${m}.bin`
 const downloading = new Set<string>()
 
+// The models the Settings/Setup UI lets a user pick between. The active model (from
+// settings, which could be something else entirely — e.g. `tiny` for local dev) is
+// always folded in too, so `doctor.models` never omits the one actually configured.
+const KNOWN_MODELS = ['large-v3', 'medium']
+
+// `ffmpeg -filters` prints one line per filter: a 3-char capability-flags column, then
+// the filter name, then an I/O spec (e.g. `V->V`), then a free-text description. We
+// require the I/O-spec shape to anchor the match — otherwise a naive substring search
+// for "ass" false-positives on filter names like `asplit`/`aselect` and on description
+// words like "band-pass"/"to pass in output".
+export function parseLibassSupport(filtersOutput: string): boolean {
+  return filtersOutput.split('\n').some(line => {
+    const m = line.match(/^\s*\S+\s+(\S+)\s+\S+->\S+/)
+    return m !== null && (m[1] === 'ass' || m[1] === 'subtitles')
+  })
+}
+
+async function checkLibass(): Promise<boolean> {
+  if (Bun.which('ffmpeg') === null) return false
+  try {
+    const proc = Bun.spawn(['ffmpeg', '-filters'], { stdout: 'pipe', stderr: 'ignore' })
+    const out = await new Response(proc.stdout).text()
+    await proc.exited
+    return parseLibassSupport(out)
+  } catch {
+    return false
+  }
+}
+
 export const systemRoutes = (db: DB) => new Elysia()
-  .get('/system/doctor', () => {
+  .get('/system/doctor', async () => {
     const model = getSetting(db, 'whisperModel', 'large-v3')
+    const modelNames = [...new Set([...KNOWN_MODELS, model])]
     return {
       ffmpeg: Bun.which('ffmpeg') !== null,
       ffprobe: Bun.which('ffprobe') !== null,
       whisper: Bun.which('whisper-cli') !== null,
+      // Homebrew's default ffmpeg build commonly omits libass, silently breaking the
+      // "burn subtitles" export path — surfaced separately from ffmpeg/ffprobe presence
+      // since a user can have a perfectly working install that still lacks this.
+      libass: await checkLibass(),
       model: { name: model, downloaded: existsSync(modelPath(model)) },
+      // Per-model download state, needed so the Settings page can show "ดาวน์โหลดแล้ว" /
+      // download-progress for both selectable models independently of which one is
+      // currently active (the `model` field above only ever reflects the active one).
+      models: modelNames.map(name => ({ name, downloaded: existsSync(modelPath(name)) })),
       acceleration: process.platform === 'darwin' && process.arch === 'arm64' ? 'metal (homebrew default)' : 'cpu',
     }
   })
