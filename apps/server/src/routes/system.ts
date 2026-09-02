@@ -51,6 +51,76 @@ const MODEL_NAME_PATTERN = /^[\w.-]+$/
 // always folded in too, so `doctor.models` never omits the one actually configured.
 const KNOWN_MODELS = ['large-v3', 'medium']
 
+type Platform = 'macos' | 'linux' | 'windows' | 'unknown'
+type PackageManager = 'homebrew' | 'scoop' | 'winget' | 'manual'
+
+export type InstallGuide = {
+  platform: Platform
+  architecture: string
+  manager: PackageManager
+  commands: string[]
+  note: string
+  manualUrl: string
+}
+
+const HOMEBREW_COMMAND = 'brew install ffmpeg-full whisper-cpp && brew link --overwrite ffmpeg-full'
+const HOMEBREW_URL = 'https://brew.sh/'
+const WHISPER_RELEASES_URL = 'https://github.com/ggml-org/whisper.cpp/releases'
+
+export function getInstallGuide(
+  runtimePlatform: string,
+  architecture: string,
+  hasCommand: (command: string) => boolean,
+): InstallGuide {
+  if (runtimePlatform === 'darwin') {
+    return {
+      platform: 'macos', architecture, manager: 'homebrew', commands: [HOMEBREW_COMMAND],
+      note: 'ต้องติดตั้ง Homebrew ก่อน หากคำสั่ง brew ยังไม่พร้อมใช้งาน', manualUrl: HOMEBREW_URL,
+    }
+  }
+
+  if (runtimePlatform === 'linux') {
+    if (hasCommand('brew')) {
+      return {
+        platform: 'linux', architecture, manager: 'homebrew', commands: [HOMEBREW_COMMAND],
+        note: 'ใช้ Homebrew บน Linux เพื่อให้ได้ ffmpeg ที่มี libass และ whisper-cli', manualUrl: HOMEBREW_URL,
+      }
+    }
+    return {
+      platform: 'linux', architecture, manager: 'manual', commands: [],
+      note: 'ติดตั้ง ffmpeg ที่มี libass และ whisper.cpp (คำสั่ง whisper-cli) ตามคู่มือของ Linux distribution ที่ใช้งาน',
+      manualUrl: WHISPER_RELEASES_URL,
+    }
+  }
+
+  if (runtimePlatform === 'win32') {
+    if (hasCommand('scoop')) {
+      return {
+        platform: 'windows', architecture, manager: 'scoop', commands: ['scoop install ffmpeg whisper-cpp'],
+        note: 'เปิด terminal ใหม่หลังติดตั้งเพื่อให้ PATH อัปเดต', manualUrl: WHISPER_RELEASES_URL,
+      }
+    }
+    if (hasCommand('winget')) {
+      return {
+        platform: 'windows', architecture, manager: 'winget', commands: ['winget install --id Gyan.FFmpeg --exact'],
+        note: 'ติดตั้ง whisper-cli จาก Whisper.cpp releases ตามลิงก์ด้านล่าง แล้วเพิ่มโฟลเดอร์ที่มี whisper-cli.exe ลง PATH',
+        manualUrl: WHISPER_RELEASES_URL,
+      }
+    }
+    return {
+      platform: 'windows', architecture, manager: 'manual', commands: [],
+      note: 'ติดตั้ง FFmpeg และ whisper-cli.exe ด้วย package manager หรือ Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH',
+      manualUrl: WHISPER_RELEASES_URL,
+    }
+  }
+
+  return {
+    platform: 'unknown', architecture, manager: 'manual', commands: [],
+    note: 'ไม่รู้จักระบบปฏิบัติการนี้ โปรดติดตั้ง FFmpeg ที่มี libass และ whisper-cli แล้วเพิ่มลง PATH',
+    manualUrl: WHISPER_RELEASES_URL,
+  }
+}
+
 // `ffmpeg -filters` prints one line per filter: a 3-char capability-flags column, then
 // the filter name, then an I/O spec (e.g. `V->V`), then a free-text description. We
 // require the I/O-spec shape to anchor the match — otherwise a naive substring search
@@ -93,6 +163,7 @@ export const systemRoutes = (db: DB) => new Elysia()
       // currently active (the `model` field above only ever reflects the active one).
       models: modelNames.map(name => ({ name, downloaded: existsSync(modelPath(name)) })),
       acceleration: process.platform === 'darwin' && process.arch === 'arm64' ? 'metal (homebrew default)' : 'cpu',
+      installGuide: getInstallGuide(process.platform, process.arch, command => Bun.which(command) !== null),
     }
   })
   .get('/system/disk-usage', () => ({

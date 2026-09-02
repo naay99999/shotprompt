@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fmtTime } from '@/lib/format'
 import { useEvents } from '@/lib/use-events'
 import { PIPELINE_STEP_META } from '@/lib/pipeline-steps'
@@ -40,6 +40,12 @@ export function ProcessingView({
 }) {
   const [progress, setProgress] = useState<{ pct: number; time: number } | null>(null)
   const [feed, setFeed] = useState<TranscriptEntry[]>([])
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEvents(e => {
     if (e.type !== 'step:update' || e.videoId !== videoId || e.name !== 'transcribe') return
@@ -70,6 +76,10 @@ export function ProcessingView({
             const isDone = status === 'done'
             const isFailed = status === 'failed'
             const isTranscribe = step.name === 'transcribe'
+            const elapsedSeconds = row?.startedAt ? Math.max(0, Math.floor((now - row.startedAt) / 1000)) : 0
+            const remainingSeconds = isTranscribe && progress && progress.pct > 0 && progress.pct < 1
+              ? Math.max(0, Math.round(elapsedSeconds * (1 - progress.pct) / progress.pct))
+              : null
 
             return (
               <div key={step.name} className="flex items-start gap-3.5 rounded-[10px] px-3.5 py-3.5">
@@ -111,8 +121,10 @@ export function ProcessingView({
                         />
                       </div>
                       <div className="mt-[7px] font-mono text-[11.5px] text-dim">
-                        {Math.round((progress?.pct ?? 0) * 100)}% · segment ล่าสุด {fmtTime(progress?.time ?? 0)}
-                        {duration ? ` / ${fmtTime(duration)}` : ''} · resume ได้ถ้าหลุด
+                        {Math.round((progress?.pct ?? 0) * 100)}% · ใช้ไป {fmtTime(elapsedSeconds)}
+                        {remainingSeconds != null ? ` · เหลือประมาณ ${fmtTime(remainingSeconds)}` : ''}
+                        {progress?.time ? ` · segment ล่าสุด ${fmtTime(progress.time)}` : ''}
+                        {duration ? ` / ${fmtTime(duration)}` : ''}
                       </div>
                     </div>
                   )}

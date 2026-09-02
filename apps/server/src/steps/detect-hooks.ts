@@ -16,7 +16,7 @@ export async function run(db: DB, videoId: string, _ctx: JobCtx) {
     weight: kws.find(k => k.tier === tier)?.weight ?? 0,
     keywords: kws.filter(k => k.tier === tier).map(k => k.word),
   }))
-  const clips = detectHooks(segs, scn, tiers, v.language as Language)
+  const clips = detectHooks(segs, scn, tiers, v.language as Language, v.duration ?? undefined)
   db.delete(candidates).where(eq(candidates.videoId, videoId)).run()
   if (clips.length)
     db.insert(candidates).values(clips.map(c => ({ id: crypto.randomUUID(), videoId, start: c.start, end: c.end, score: c.score }))).run()

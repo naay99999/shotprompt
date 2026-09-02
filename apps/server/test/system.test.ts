@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'bun:test'
-import { createDb, seedKeywords } from '@shotprompt/db'
-import { createApp } from '../src/app'
-import { createCtx } from '../src/context'
-import { parseLibassSupport } from '../src/routes/system'
+import { getInstallGuide, parseLibassSupport } from '../src/routes/system'
+import { createTestApp } from './helpers/app'
 
-const app = () => { const db = createDb(':memory:'); seedKeywords(db); return createApp(createCtx(db, { autoRun: false })) }
+const app = () => createTestApp().app
 
 // Real `ffmpeg -filters` output, trimmed, as captured on a Homebrew build that lacks
 // libass (`brew install ffmpeg` without a libass-enabling formula/tap): no `ass` or
@@ -50,6 +48,36 @@ describe('parseLibassSupport', () => {
   })
 })
 
+describe('getInstallGuide', () => {
+  it('provides the Homebrew command for macOS', () => {
+    expect(getInstallGuide('darwin', 'arm64', () => false)).toEqual({
+      platform: 'macos', architecture: 'arm64', manager: 'homebrew',
+      commands: ['brew install ffmpeg-full whisper-cpp && brew link --overwrite ffmpeg-full'],
+      note: 'ต้องติดตั้ง Homebrew ก่อน หากคำสั่ง brew ยังไม่พร้อมใช้งาน',
+      manualUrl: 'https://brew.sh/',
+    })
+  })
+
+  it('uses Winget for FFmpeg and documents Whisper.cpp’s manual Windows fallback', () => {
+    const guide = getInstallGuide('win32', 'x64', command => command === 'winget')
+
+    expect(guide.platform).toBe('windows')
+    expect(guide.manager).toBe('winget')
+    expect(guide.commands).toEqual(['winget install --id Gyan.FFmpeg --exact'])
+    expect(guide.note).toContain('whisper-cli')
+    expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
+  })
+
+  it('does not invent a distro package command when Linux has no supported package manager', () => {
+    const guide = getInstallGuide('linux', 'x64', () => false)
+
+    expect(guide.platform).toBe('linux')
+    expect(guide.manager).toBe('manual')
+    expect(guide.commands).toEqual([])
+    expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
+  })
+})
+
 describe('system routes', () => {
   it('doctor reports binary, libass, and model status', async () => {
     const res = await app().handle(new Request('http://x/system/doctor'))
@@ -57,6 +85,8 @@ describe('system routes', () => {
     expect(typeof body.ffmpeg).toBe('boolean')
     expect(typeof body.libass).toBe('boolean')
     expect(body.model.name).toBe('large-v3')
+    expect(body.installGuide.platform).toBe('macos')
+    expect(body.installGuide.commands).toHaveLength(1)
     expect(Array.isArray(body.models)).toBe(true)
     const names = body.models.map((m: { name: string }) => m.name)
     expect(names).toContain('large-v3')

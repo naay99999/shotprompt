@@ -4,7 +4,7 @@ import { rmSync } from 'node:fs'
 import { candidates, clipSubtitles, clips, exportsTable, type DB } from '@shotprompt/db'
 import { buildSRT } from '@shotprompt/core'
 import type { Ctx } from '../context'
-import { createClip, updateClip } from '../clip-service'
+import { createClip, replaceClipSubtitles, updateClip } from '../clip-service'
 
 export const clipRoutes = ({ db }: Ctx) => new Elysia()
   .get('/videos/:id/candidates', ({ params }) =>
@@ -30,10 +30,12 @@ export const clipRoutes = ({ db }: Ctx) => new Elysia()
   .get('/clips/:id/subtitles', ({ params }) =>
     db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, params.id)).orderBy(asc(clipSubtitles.start)).all())
   .put('/clips/:id/subtitles', ({ params, body }) => {
-    db.delete(clipSubtitles).where(eq(clipSubtitles.clipId, params.id)).run()
-    if (body.subtitles.length)
-      db.insert(clipSubtitles).values(body.subtitles.map(s => ({ clipId: params.id, ...s }))).run()
-    return { ok: true }
+    try {
+      replaceClipSubtitles(db, params.id, body.subtitles)
+      return { ok: true }
+    } catch (e) {
+      return status(400, { message: String(e) })
+    }
   }, { body: t.Object({ subtitles: t.Array(t.Object({ start: t.Number(), end: t.Number(), text: t.String() })) }) })
   .get('/clips/:id/srt', ({ params }) => {
     const clip = db.select().from(clips).where(eq(clips.id, params.id)).get()

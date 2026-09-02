@@ -128,6 +128,9 @@ describe('detectHooks', () => {
     expect(detectHooks([{ start: 10, end: 20, text: 'ด่วน ลด โปร' }], undefined, TH)[0].end).toBeCloseTo(21.5, 1))
   it('scene clip with no segments ends at ts+SCENE_WINDOW+BREATH_PAD', () =>
     expect(detectHooks([], [30], TH)[0].end).toBeCloseTo(61.5, 1))
+  it('clamps padded candidates to the video duration', () => {
+    expect(detectHooks([], [95], TH, 'th', 100)).toEqual([{ start: 90, end: 100, score: 35 }])
+  })
   it('no merge past MAX_CLIP_DURATION', () => {
     const clips = detectHooks(
       [

@@ -13,18 +13,32 @@ type Doctor = {
   model: { name: string; downloaded: boolean }
   models: { name: string; downloaded: boolean }[]
   acceleration: string
+  installGuide: {
+    platform: 'macos' | 'linux' | 'windows' | 'unknown'
+    architecture: string
+    manager: 'homebrew' | 'scoop' | 'winget' | 'manual'
+    commands: string[]
+    note: string
+    manualUrl: string
+  }
 }
 
 const MODEL_INFO: Record<string, { size: string; desc: string }> = {
   'large-v3': { size: '3.1 GB', desc: 'แม่นยำที่สุดสำหรับภาษาไทย' },
   medium: { size: '1.5 GB', desc: 'เร็วกว่า ~2–3 เท่า แม่นยำลดลงเล็กน้อย' },
 }
+const MODEL_ORDER = ['large-v3', 'medium']
 // The server accepts any whisper.cpp model name (e.g. `tiny`, handy for local dev) —
 // fall back to something sensible when the configured model isn't one of the two
 // canonical picks the UI otherwise shows.
 const UNKNOWN_MODEL_INFO = { size: '', desc: 'โมเดลที่กำหนดเอง' }
 
-const BREW_CMD = 'brew install ffmpeg whisper-cpp'
+const PLATFORM_LABEL = {
+  macos: 'macOS',
+  linux: 'Linux',
+  windows: 'Windows',
+  unknown: 'ระบบไม่ทราบชนิด',
+} as const
 
 type DlState = { received: number; total: number; done: boolean; error?: string } | null
 
@@ -34,11 +48,16 @@ export default function SetupPage() {
   const [checking, setChecking] = useState(true)
   const [copied, setCopied] = useState(false)
   const [dl, setDl] = useState<DlState>(null)
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
 
   const recheck = useCallback(() => {
     setChecking(true)
     return api.system.doctor.get().then(({ data }) => {
-      if (data) setDoctor(data as Doctor)
+      if (data) {
+        const next = data as Doctor
+        setDoctor(next)
+        setSelectedModel(next.model.name)
+      }
       setChecking(false)
     })
   }, [])
@@ -53,7 +72,7 @@ export default function SetupPage() {
       return
     }
     if (e.type === 'model:download' && typeof e.model === 'string') {
-      if (doctor && e.model !== doctor.model.name) return
+      if (e.model !== modelName) return
       setDl({
         received: (e.received as number) ?? 0,
         total: (e.total as number) ?? 0,
@@ -64,9 +83,13 @@ export default function SetupPage() {
     }
   })
 
+  const installGuide = doctor?.installGuide
+  const installCommand = installGuide?.commands.join('\n') ?? ''
+
   function copy() {
+    if (!installCommand) return
     try {
-      navigator.clipboard.writeText(BREW_CMD)
+      navigator.clipboard.writeText(installCommand)
     } catch {
       /* clipboard unavailable — button still flips to give feedback */
     }
@@ -77,10 +100,19 @@ export default function SetupPage() {
   async function downloadModel() {
     if (!doctor) return
     setDl({ received: 0, total: 0, done: false })
-    await api.system.model.download.post({ model: doctor.model.name })
+    await api.system.model.download.post({ model: modelName })
   }
 
-  const modelName = doctor?.model.name ?? 'large-v3'
+  async function selectModel(name: string) {
+    setSelectedModel(name)
+    setDl(null)
+    await api.settings.put({ whisperModel: name })
+    setDoctor(current => current
+      ? { ...current, model: { name, downloaded: current.models.find(model => model.name === name)?.downloaded ?? false } }
+      : current)
+  }
+
+  const modelName = selectedModel ?? doctor?.model.name ?? 'large-v3'
   const modelInfo = MODEL_INFO[modelName] ?? UNKNOWN_MODEL_INFO
   const modelDownloaded = doctor?.model.downloaded ?? false
   const modelBusy = !!dl && !dl.done
@@ -140,20 +172,50 @@ export default function SetupPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 rounded-[10px] border border-line bg-bg px-3.5 py-2.5">
-            <div className="flex-1 font-mono text-[12.5px] text-[#c9c4bb]">{BREW_CMD}</div>
-            <button
-              type="button"
-              onClick={copy}
-              className={`flex-none rounded-[7px] border px-3 py-1.5 text-[11.5px] transition-colors ${
-                copied ? 'border-ok/40 text-ok' : 'border-line3 text-[#c9c4bb] hover:border-[#4a4438]'
-              }`}
-            >
-              {copied ? 'คัดลอกแล้ว ✓' : 'คัดลอก'}
-            </button>
+          <div className="flex flex-col gap-2 rounded-[10px] border border-line bg-bg px-3.5 py-2.5">
+            <div className="flex items-center justify-between gap-3 text-[11.5px] text-dim">
+              <span>คำแนะนำสำหรับ {installGuide ? PLATFORM_LABEL[installGuide.platform] : 'เครื่องนี้'}</span>
+              {installGuide && <span className="font-mono">{installGuide.architecture} · {installGuide.manager}</span>}
+            </div>
+            {installCommand && (
+              <div className="flex items-center gap-2.5">
+                <pre className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-[12.5px] text-[#c9c4bb]">{installCommand}</pre>
+                <button
+                  type="button"
+                  onClick={copy}
+                  className={`flex-none rounded-[7px] border px-3 py-1.5 text-[11.5px] transition-colors ${
+                    copied ? 'border-ok/40 text-ok' : 'border-line3 text-[#c9c4bb] hover:border-[#4a4438]'
+                  }`}
+                >
+                  {copied ? 'คัดลอกแล้ว ✓' : 'คัดลอก'}
+                </button>
+              </div>
+            )}
+            <div className="text-[11.5px] text-dim">{installGuide?.note ?? 'กำลังตรวจหาระบบปฏิบัติการและเครื่องมือที่ใช้ติดตั้ง…'}</div>
+            {installGuide && (
+              <a href={installGuide.manualUrl} target="_blank" rel="noreferrer" className="w-fit text-[11.5px] text-accent hover:underline">
+                เปิดคู่มือติดตั้ง →
+              </a>
+            )}
           </div>
 
-          <div className="flex items-center gap-3 rounded-[10px] border border-line bg-surface2 px-3.5 py-2.5">
+          <div className="flex flex-col gap-2 rounded-[10px] border border-line bg-surface2 px-3.5 py-2.5">
+            <div className="text-[11.5px] font-semibold tracking-[.4px] text-faint">เลือกโมเดลถอดเสียง</div>
+            <div className="flex gap-2">
+              {MODEL_ORDER.map(name => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => selectModel(name)}
+                  className={`rounded-md border px-2.5 py-1 text-[11.5px] transition-colors ${
+                    modelName === name ? 'border-accent bg-accent/10 text-accent' : 'border-line3 text-dim hover:text-ink'
+                  }`}
+                >
+                  {name === 'large-v3' ? 'แม่นยำ · large-v3' : 'เร็วขึ้น · medium'}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
             {modelDownloaded ? (
               <StatusDot ok />
             ) : (
@@ -187,6 +249,7 @@ export default function SetupPage() {
                 ล้มเหลว
               </div>
             )}
+            </div>
           </div>
         </div>
 

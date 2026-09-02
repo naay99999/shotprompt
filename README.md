@@ -15,17 +15,18 @@ export all run on your own machine. Nothing is uploaded anywhere.
 On macOS, the quickest path is:
 
 ```bash
-brew install ffmpeg whisper-cpp
+brew install ffmpeg-full whisper-cpp && brew link --overwrite ffmpeg-full
 ```
 
 Apple Silicon Macs get GPU-accelerated transcription via Metal automatically — no
 extra configuration needed.
 
-### A caveat: Homebrew's `ffmpeg` may be missing subtitle-burning support
+### A caveat: Homebrew's plain `ffmpeg` is missing subtitle-burning support
 
 ShotPrompt's core feature — burning Thai subtitles into an exported clip — depends on
-`ffmpeg` being built with **libass**. Homebrew's `ffmpeg` formula does not always
-include it, depending on which formulas/taps are already installed on your machine.
+`ffmpeg` being built with **libass**. Homebrew's plain `ffmpeg` formula deliberately
+excludes it (along with `fontconfig`/`harfbuzz`/`freetype`); only the separate
+`ffmpeg-full` formula — also in homebrew-core, no extra tap needed — bundles them.
 Exports *without* burned subtitles work regardless; only the burn-in path needs this.
 
 Check whether your `ffmpeg` has it:
@@ -39,16 +40,36 @@ up empty, subtitle burning will fail at export time (ShotPrompt surfaces this as
 failed export with an error message, not a silent hang — and both the Settings page
 and the first-run Setup page show a `libass` check that will read ✕ in this case).
 
-There isn't one universal fix — what works depends on your existing Homebrew setup.
-Things worth trying, roughly in order of least to most effort:
+Fix it with:
 
-1. `brew reinstall ffmpeg` after checking whether a variant/tap with libass baked in
-   is available for your OS version.
-2. Build `ffmpeg` from source with `--enable-libass` (requires `libass` itself to be
-   installed first, e.g. `brew install libass`, then compiling ffmpeg against it).
+```bash
+brew install ffmpeg-full
+brew link --overwrite ffmpeg-full
+```
 
-Be prepared for this to take some manual troubleshooting — it's a real gap in the
-"just `brew install` and go" story on some systems, not a bug in ShotPrompt.
+`ffmpeg-full` is keg-only, so the `--overwrite` link is required — it repoints the
+`ffmpeg`/`ffprobe`/`ffplay` symlinks at the `-full` build. No server/app restart is
+needed afterward; the doctor check (`GET /system/doctor`) spawns `ffmpeg` fresh each
+time, so it picks up the new binary on the next check. Note that a later
+`brew upgrade ffmpeg` (the plain formula) can silently re-link over this — if libass
+disappears again, just re-run the `brew link --overwrite` command above.
+
+### Linux and Windows
+
+The Setup page detects the OS, CPU architecture, and available package manager, then
+shows a command you can copy. It never runs an installer automatically.
+
+- **Linux:** If Homebrew is installed, use the displayed Homebrew command. Otherwise,
+  install an `ffmpeg` build with libass and the `whisper-cli` binary from your
+  distribution or the [Whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases),
+  then add both to `PATH`.
+- **Windows:** With Scoop installed, use `scoop install ffmpeg whisper-cpp`. With
+  WinGet, Setup installs FFmpeg with `winget install --id Gyan.FFmpeg --exact` and
+  links to the Whisper.cpp release needed for `whisper-cli.exe`; add that folder to
+  your user `PATH` and open a new terminal.
+
+Use the Setup page’s “ตรวจสอบอีกครั้ง” button after installing. It verifies
+`ffmpeg`, `ffprobe`, `whisper-cli`, and whether subtitle burn-in support is present.
 
 ## Setup
 

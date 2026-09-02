@@ -28,6 +28,7 @@ export function detectHooks(
   sceneTimestamps: number[] | undefined,
   tiers: KeywordTier[],
   language: Language = 'th',
+  duration?: number,
 ): ScoredClip[] {
   if (segments.length === 0 && !sceneTimestamps?.length) {
     return []
@@ -88,7 +89,7 @@ export function detectHooks(
   // Phase 4: pad
   return merged.map(c => ({
     start: Math.max(0, c.start - WINDOW_PAD),
-    end: c.end + BREATH_PAD,
+    end: duration == null ? c.end + BREATH_PAD : Math.min(duration, c.end + BREATH_PAD),
     score: c.score,
   }))
 }

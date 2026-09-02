@@ -10,6 +10,21 @@ import { videoDir } from '../env'
 
 const ACTIVE_STATUSES = ['queued', 'running']
 
+function activePipelineJob(ctx: Ctx, videoId: string) {
+  return ctx.db.select().from(jobs).where(eq(jobs.videoId, videoId)).all()
+    .find(job => job.type === 'pipeline' && ACTIVE_STATUSES.includes(job.status))
+}
+
+function queueFullPipeline(ctx: Ctx, videoId: string) {
+  ctx.db.delete(candidates).where(eq(candidates.videoId, videoId)).run()
+  ctx.db.delete(scenes).where(eq(scenes.videoId, videoId)).run()
+  ctx.db.delete(segments).where(eq(segments.videoId, videoId)).run()
+  const jobId = crypto.randomUUID()
+  ctx.db.insert(jobs).values({ id: jobId, videoId, type: 'pipeline', status: 'queued', createdAt: Date.now() }).run()
+  ctx.pipelineQueue.enqueue(jobId)
+  return jobId
+}
+
 export const videoRoutes = (ctx: Ctx) => new Elysia()
   .post('/videos', async ({ body, request }) => {
     const contentType = request.headers.get('content-type') ?? ''
@@ -90,20 +105,16 @@ export const videoRoutes = (ctx: Ctx) => new Elysia()
   .post('/videos/:id/retry', ({ params }) => {
     const video = ctx.db.select().from(videos).where(eq(videos.id, params.id)).get()
     if (!video) return status(404, { message: 'not found' })
-
-    const latestPipelineJob = ctx.db.select().from(jobs)
-      .where(eq(jobs.videoId, params.id))
-      .orderBy(desc(jobs.createdAt))
-      .all()
-      .find(j => j.type === 'pipeline')
-    if (latestPipelineJob && ACTIVE_STATUSES.includes(latestPipelineJob.status)) {
+    if (activePipelineJob(ctx, params.id)) {
       return status(409, { message: 'pipeline job already active' })
     }
-
-    const jobId = crypto.randomUUID()
-    ctx.db.insert(jobs).values({ id: jobId, videoId: params.id, type: 'pipeline', status: 'queued', createdAt: Date.now() }).run()
-    ctx.pipelineQueue.enqueue(jobId)
-    return { jobId }
+    return { jobId: queueFullPipeline(ctx, params.id) }
+  })
+  .post('/videos/:id/repair', ({ params }) => {
+    const video = ctx.db.select().from(videos).where(eq(videos.id, params.id)).get()
+    if (!video) return status(404, { message: 'not found' })
+    if (activePipelineJob(ctx, params.id)) return status(409, { message: 'pipeline job already active' })
+    return { jobId: queueFullPipeline(ctx, params.id) }
   })
   .get('/videos/:id/thumb/:file', ({ params }) => {
     const { file } = params

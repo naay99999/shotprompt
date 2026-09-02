@@ -2,14 +2,12 @@ import { describe, expect, it } from 'bun:test'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createDb, jobs, videos } from '@shotprompt/db'
-import { createApp } from '../src/app'
-import { createCtx } from '../src/context'
+import { candidates, clipSubtitles, clips, exportsTable, jobs, scenes, segments } from '@shotprompt/db'
+import { createTestApp } from './helpers/app'
+import { createJob, createReadyVideo } from './helpers/fixtures'
 
 function makeApp() {
-  const db = createDb(':memory:')
-  const ctx = createCtx(db, { autoRun: false }) // autoRun:false → enqueue records but does not execute (test hook)
-  return { app: createApp(ctx), db }
+  return createTestApp()
 }
 
 describe('videos', () => {
@@ -36,8 +34,8 @@ describe('videos', () => {
   })
   it('DELETE refuses while job is active', async () => {
     const { app, db } = makeApp()
-    db.insert(videos).values({ id: 'v1', filename: 'a.mp4', path: '/x', status: 'processing', language: 'th', createdAt: 1 }).run()
-    db.insert(jobs).values({ id: 'j1', videoId: 'v1', type: 'pipeline', status: 'running', createdAt: 1 }).run()
+    createReadyVideo(db, { status: 'processing' })
+    createJob(db, { status: 'running' })
     const res = await app.handle(new Request('http://x/videos/v1', { method: 'DELETE' }))
     expect(res.status).toBe(409)
   })
@@ -45,10 +43,50 @@ describe('videos', () => {
     const { app, db } = makeApp()
     const dir = mkdtempSync(join(tmpdir(), 'sp-'))
     const src = join(dir, 'source.mp4'); writeFileSync(src, '0123456789')
-    db.insert(videos).values({ id: 'v1', filename: 'a.mp4', path: src, status: 'ready', language: 'th', createdAt: 1 }).run()
+    createReadyVideo(db, { path: src })
     const res = await app.handle(new Request('http://x/videos/v1/stream', { headers: { range: 'bytes=2-5' } }))
     expect(res.status).toBe(206)
     expect(res.headers.get('content-range')).toBe('bytes 2-5/10')
     expect(await res.text()).toBe('2345')
+  })
+  it('repairs derived data without touching user clips, subtitles, or exports', async () => {
+    const { app, db } = makeApp()
+    createReadyVideo(db, { duration: 40 })
+    db.insert(segments).values({ videoId: 'v1', start: 0, end: 2, text: 'old auto subtitle' }).run()
+    db.insert(scenes).values({ videoId: 'v1', time: 1 }).run()
+    db.insert(candidates).values({ id: 'c1', videoId: 'v1', start: 0, end: 5, score: 40 }).run()
+    db.insert(clips).values({ id: 'cl1', videoId: 'v1', start: 0, end: 5, cropOffset: 0, createdAt: 1 }).run()
+    db.insert(clipSubtitles).values({ clipId: 'cl1', start: 0, end: 2, text: 'edited subtitle' }).run()
+    db.insert(exportsTable).values({ id: 'e1', clipId: 'cl1', aspect: '9:16', burnSubtitles: false, status: 'done', createdAt: 1 }).run()
+
+    const res = await app.handle(new Request('http://x/videos/v1/repair', { method: 'POST' }))
+
+    expect(res.status).toBe(200)
+    expect(db.select().from(segments).all()).toEqual([])
+    expect(db.select().from(scenes).all()).toEqual([])
+    expect(db.select().from(candidates).all()).toEqual([])
+    expect(db.select().from(clipSubtitles).all().map(row => row.text)).toEqual(['edited subtitle'])
+    expect(db.select().from(exportsTable).all().map(row => row.id)).toEqual(['e1'])
+    expect(db.select().from(jobs).all().filter(job => job.type === 'pipeline')).toHaveLength(1)
+  })
+  it('refuses repair while a pipeline job is active', async () => {
+    const { app, db } = makeApp()
+    createReadyVideo(db, { duration: 40 })
+    createJob(db, { status: 'running' })
+    const res = await app.handle(new Request('http://x/videos/v1/repair', { method: 'POST' }))
+    expect(res.status).toBe(409)
+  })
+  it('retries from a clean transcription pipeline', async () => {
+    const { app, db } = makeApp()
+    createReadyVideo(db, { duration: 40 })
+    db.insert(segments).values({ videoId: 'v1', start: 0, end: 2, text: 'old auto subtitle' }).run()
+    db.insert(candidates).values({ id: 'c1', videoId: 'v1', start: 0, end: 5, score: 40 }).run()
+
+    const res = await app.handle(new Request('http://x/videos/v1/retry', { method: 'POST' }))
+
+    expect(res.status).toBe(200)
+    expect(db.select().from(segments).all()).toEqual([])
+    expect(db.select().from(candidates).all()).toEqual([])
+    expect(db.select().from(jobs).all().filter(job => job.type === 'pipeline')).toHaveLength(1)
   })
 })

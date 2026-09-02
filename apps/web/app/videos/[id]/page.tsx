@@ -12,6 +12,7 @@ import { ExportList } from '@/components/export-list'
 import { ProcessingView, type Job } from '@/components/processing-view'
 import { Timeline } from '@/components/timeline'
 import { api, API_BASE } from '@/lib/api'
+import { nextPreviewPosition, previewRangeForClip, type PreviewRange } from '@/lib/clip-preview'
 import { fmtTime } from '@/lib/format'
 import { useEvents } from '@/lib/use-events'
 
@@ -39,12 +40,15 @@ export default function WorkspacePage() {
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null)
   const [exportSel, setExportSel] = useState<Record<string, boolean>>({})
   const [currentTime, setCurrentTime] = useState(0)
+  const [previewRange, setPreviewRange] = useState<PreviewRange | null>(null)
   const [canceling, setCanceling] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [repairing, setRepairing] = useState(false)
   const [exportsTick, setExportsTick] = useState(0)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
+  const lastDisplayedTime = useRef(0)
 
   const refetchAll = useCallback(() => {
     Promise.all([
@@ -73,9 +77,39 @@ export default function WorkspacePage() {
     }
   })
 
-  function seek(t: number) {
-    setCurrentTime(t)
+  function setVideoTime(t: number) {
+    if (Math.abs(t - lastDisplayedTime.current) >= 0.25) {
+      lastDisplayedTime.current = t
+      setCurrentTime(t)
+    }
     if (videoRef.current) videoRef.current.currentTime = t
+  }
+
+  function seek(t: number) {
+    setPreviewRange(null)
+    setVideoTime(t)
+  }
+
+  function selectClip(clipId: string) {
+    const clip = clips.find(row => row.id === clipId)
+    setSelectedClipId(clipId)
+    const range = clip && previewRangeForClip(clip)
+    setPreviewRange(range ?? null)
+    if (range) setVideoTime(range.start)
+  }
+
+  function onVideoTimeUpdate(e: React.SyntheticEvent<HTMLVideoElement>) {
+    const player = e.currentTarget
+    const next = previewRange && !player.paused ? nextPreviewPosition(player.currentTime, previewRange) : null
+    if (next != null) {
+      setVideoTime(next)
+      void player.play().catch(() => {})
+      return
+    }
+    if (Math.abs(player.currentTime - lastDisplayedTime.current) >= 0.25) {
+      lastDisplayedTime.current = player.currentTime
+      setCurrentTime(player.currentTime)
+    }
   }
 
   async function createRange(start: number, end: number) {
@@ -96,6 +130,14 @@ export default function WorkspacePage() {
     setRetrying(true)
     await api.videos({ id }).retry.post()
     setRetrying(false)
+    refetchAll()
+  }
+
+  async function repair() {
+    if (repairing) return
+    setRepairing(true)
+    await api.videos({ id }).repair.post()
+    setRepairing(false)
     refetchAll()
   }
 
@@ -155,6 +197,17 @@ export default function WorkspacePage() {
               {canceling ? 'กำลังยกเลิก…' : 'ยกเลิกงาน'}
             </button>
           )}
+          {isReady && (
+            <button
+              type="button"
+              onClick={repair}
+              disabled={repairing}
+              className="rounded-lg border border-line3 px-3.5 py-[7px] text-[12.5px] text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+              title="ถอดเสียงและสร้าง candidate ใหม่ โดยเก็บคลิปและ export เดิมไว้"
+            >
+              {repairing ? 'กำลังเริ่มซ่อม…' : 'ซ่อม auto subtitle'}
+            </button>
+          )}
         </div>
 
         {isProcessing && <ProcessingView videoId={id} duration={video.duration} job={job} />}
@@ -164,13 +217,14 @@ export default function WorkspacePage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-err/15 text-[18px] text-err">✕</div>
             <div className="text-[15px] font-semibold">ประมวลผลล้มเหลว</div>
             {job?.error && <div className="max-w-[520px] text-[12.5px] text-dim">{job.error}</div>}
+            <div className="max-w-[520px] text-[12px] text-faint">ลองใหม่จะถอดเสียงและสร้าง candidate ใหม่ทั้งหมด เพื่อให้ subtitle ไม่ซ้ำหรือเวลาเพี้ยน</div>
             <button
               type="button"
               onClick={retry}
               disabled={retrying}
               className="mt-1.5 rounded-lg bg-accent px-4 py-2 text-[13px] font-semibold text-[#1a120b] transition-[filter] hover:brightness-110 disabled:opacity-50"
             >
-              {retrying ? 'กำลังลองใหม่…' : 'ลองใหม่'}
+              {retrying ? 'กำลังลองใหม่…' : 'ถอดใหม่'}
             </button>
           </div>
         )}
@@ -184,12 +238,26 @@ export default function WorkspacePage() {
                   src={`${API_BASE}/videos/${id}/stream`}
                   controls
                   className="aspect-video w-full bg-black"
-                  onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
-                  onLoadedMetadata={e => setCurrentTime(e.currentTarget.currentTime)}
+                  onTimeUpdate={onVideoTimeUpdate}
+                  onSeeking={e => {
+                    if (previewRange && (e.currentTarget.currentTime < previewRange.start || e.currentTarget.currentTime > previewRange.end)) {
+                      setPreviewRange(null)
+                    }
+                  }}
+                  onLoadedMetadata={e => setVideoTime(e.currentTarget.currentTime)}
                 />
                 <div className="pointer-events-none absolute top-2.5 left-3 font-mono text-[11px] text-[#c9c4bb]">
                   source.mp4 · {video.width ?? '?'}×{video.height ?? '?'} · {fmtTime(currentTime)}
                 </div>
+                {previewRange && (
+                  <button
+                    type="button"
+                    onClick={() => setPreviewRange(null)}
+                    className="absolute top-2.5 right-3 rounded-md bg-black/70 px-2 py-1 font-mono text-[11px] text-[#c9c4bb] transition-colors hover:text-accent"
+                  >
+                    ดูวิดีโอเต็ม
+                  </button>
+                )}
               </div>
 
               <Timeline
@@ -205,7 +273,7 @@ export default function WorkspacePage() {
                 clips={clips}
                 selectedClipId={selectedClipId}
                 exportSel={exportSel}
-                onSelect={cid => setSelectedClipId(cid)}
+                onSelect={selectClip}
                 onToggleExport={toggleExport}
               />
 
@@ -232,13 +300,14 @@ export default function WorkspacePage() {
                 clip={selectedClip}
                 duration={duration}
                 videoContainerRef={videoContainerRef}
-                onClose={() => setSelectedClipId(null)}
+                onClose={() => { setSelectedClipId(null); setPreviewRange(null) }}
                 onUpdated={refetchAll}
                 onDeleted={() => {
                   // Deleting a clip cascades to delete its exports server-side, but that
                   // doesn't emit an export:update event — bump exportsTick so ExportList
                   // drops any now-orphaned rows for this clip instead of showing stale ones.
                   setSelectedClipId(null)
+                  setPreviewRange(null)
                   refetchAll()
                   setExportsTick(t => t + 1)
                 }}

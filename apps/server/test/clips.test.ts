@@ -2,10 +2,12 @@ import { describe, expect, it } from 'bun:test'
 import { createDb, candidates, clipSubtitles, segments, videos } from '@shotprompt/db'
 import { eq } from 'drizzle-orm'
 import { createClip, updateClip } from '../src/clip-service'
+import { createTestApp } from './helpers/app'
+import { createClip as createClipFixture, createReadyVideo } from './helpers/fixtures'
 
 function seeded() {
   const db = createDb(':memory:')
-  db.insert(videos).values({ id: 'v1', filename: 'a.mp4', path: '/x', status: 'ready', language: 'th', createdAt: 1 }).run()
+  db.insert(videos).values({ id: 'v1', filename: 'a.mp4', path: '/x', duration: 40, status: 'ready', language: 'th', createdAt: 1 }).run()
   db.insert(segments).values([
     { videoId: 'v1', start: 0, end: 5, text: 'a' },
     { videoId: 'v1', start: 10, end: 15, text: 'b' },
@@ -31,6 +33,16 @@ describe('createClip', () => {
     expect(clip.candidateId).toBeNull()
     const subs = db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, clip.id)).all()
     expect(subs.map(s => s.text)).toEqual(['d'])
+  })
+  it('rejects a manual range outside the source video', () => {
+    const db = seeded()
+    expect(() => createClip(db, 'v1', { start: -1, end: 10 })).toThrow('range outside video')
+    expect(() => createClip(db, 'v1', { start: 10, end: 41 })).toThrow('range outside video')
+  })
+  it('rejects a candidate owned by a different video', () => {
+    const db = seeded()
+    db.insert(videos).values({ id: 'v2', filename: 'b.mp4', path: '/y', duration: 40, status: 'ready', language: 'th', createdAt: 2 }).run()
+    expect(() => createClip(db, 'v2', { candidateId: 'c1' })).toThrow('candidate does not belong to video')
   })
 })
 
@@ -61,5 +73,42 @@ describe('updateClip trim rules', () => {
       .where(eq(clipSubtitles.clipId, clip.id)).all()
       .filter(s => s.text === 'straddle')
     expect(straddleRows).toHaveLength(1)
+  })
+  it('rejects an edit outside the source video or crop range', () => {
+    const db = seeded()
+    const clip = createClip(db, 'v1', { start: 8, end: 26 })
+    expect(() => updateClip(db, clip.id, { end: 41 })).toThrow('range outside video')
+    expect(() => updateClip(db, clip.id, { cropOffset: 1.1 })).toThrow('invalid crop offset')
+  })
+})
+
+describe('subtitle replacement', () => {
+  it('keeps existing subtitles when a replacement row has an invalid range', async () => {
+    const { app, db } = createTestApp()
+    createReadyVideo(db, { duration: 40 })
+    createClipFixture(db)
+    db.insert(clipSubtitles).values({ clipId: 'cl1', start: 5, end: 6, text: 'keep me' }).run()
+
+    const res = await app.handle(new Request('http://x/clips/cl1/subtitles', {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ subtitles: [{ start: 9, end: 8, text: 'invalid' }] }),
+    }))
+
+    expect(res.status).toBe(400)
+    expect(db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, 'cl1')).all().map(row => row.text)).toEqual(['keep me'])
+  })
+  it('replaces all subtitle rows atomically after validation succeeds', async () => {
+    const { app, db } = createTestApp()
+    createReadyVideo(db, { duration: 40 })
+    createClipFixture(db)
+    db.insert(clipSubtitles).values({ clipId: 'cl1', start: 5, end: 6, text: 'old' }).run()
+
+    const res = await app.handle(new Request('http://x/clips/cl1/subtitles', {
+      method: 'PUT', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ subtitles: [{ start: 5, end: 6, text: 'new' }] }),
+    }))
+
+    expect(res.status).toBe(200)
+    expect(db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, 'cl1')).all().map(row => row.text)).toEqual(['new'])
   })
 })

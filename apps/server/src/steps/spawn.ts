@@ -1,26 +1,29 @@
 import type { JobCtx } from '../queue'
+import { LineDecoder } from './line-decoder'
 
 export async function runCmd(
   cmd: string, args: string[], ctx: JobCtx,
-  opts: { onStdoutLine?: (line: string) => void; ignoreExitCode?: boolean } = {},
+  opts: { onStdoutLine?: (line: string) => void; onStderrLine?: (line: string) => void; ignoreExitCode?: boolean } = {},
 ): Promise<{ stderr: string }> {
   const proc = Bun.spawn([cmd, ...args], { stdout: 'pipe', stderr: 'pipe' })
   ctx.setChild(proc)
   const onAbort = () => proc.kill()
   ctx.signal.addEventListener('abort', onAbort, { once: true })
-  let stdoutDone: Promise<void> = Promise.resolve()
-  if (opts.onStdoutLine) {
-    stdoutDone = (async () => {
-      let buf = ''
-      for await (const chunk of proc.stdout) {
-        buf += new TextDecoder().decode(chunk)
-        const lines = buf.split('\n'); buf = lines.pop() ?? ''
-        for (const l of lines) opts.onStdoutLine!(l)
-      }
-      if (buf) opts.onStdoutLine!(buf)
-    })()
+  const consumeLines = async (stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void) => {
+    const decoder = new LineDecoder()
+    const textDecoder = new TextDecoder()
+    let text = ''
+    for await (const chunk of stream) {
+      text += textDecoder.decode(chunk, { stream: true })
+      if (onLine) for (const line of decoder.push(chunk)) onLine(line)
+    }
+    text += textDecoder.decode()
+    if (onLine) for (const line of decoder.finish()) onLine(line)
+    return text
   }
-  const stderr = await new Response(proc.stderr).text()
+  const stdoutDone = opts.onStdoutLine ? consumeLines(proc.stdout, opts.onStdoutLine) : new Response(proc.stdout).text()
+  const stderrDone = opts.onStderrLine ? consumeLines(proc.stderr, opts.onStderrLine) : new Response(proc.stderr).text()
+  const stderr = await stderrDone
   const code = await proc.exited
   await stdoutDone
   ctx.setChild(null)

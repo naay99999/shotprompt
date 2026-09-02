@@ -4,7 +4,7 @@
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "bunx concurrently -k -n server,web \"bun run --cwd apps/server dev\" \"bun run --cwd apps/web dev\"",
-    "test": "bun test packages apps/server",
+    "test": "bun test packages/core/test/*.test.ts packages/db/test/*.test.ts apps/server/test/*.test.ts apps/web/test/*.test.ts",
     "typecheck": "bunx tsc -b packages/core packages/db apps/server && bunx tsc --noEmit -p apps/web"
   },
   "devDependencies": {
