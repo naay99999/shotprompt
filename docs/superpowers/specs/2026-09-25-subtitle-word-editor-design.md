@@ -1,6 +1,6 @@
 # Subtitle word timing and editor
 
-**Status:** Conversational design approved on 2026-09-25; written spec pending review. This is the first of three subtitle work packages.
+**Status:** Approved by the user on 2026-09-25. This is the first of three subtitle work packages.
 
 ## Intent and delivery sequence
 
@@ -24,8 +24,8 @@ Write the source-word set in one transaction after validation. Keep the detailed
 
 ## Persistent model
 
-- `transcript_words`: immutable `id`, `segmentId`, order, text, absolute video start/end, and `needsReview`. `segments` remains the input to hook detection.
-- `subtitle_tracks`: `id`, `clipId`, language, kind (`original` initially), display mode (`grouped` or `karaoke`), maximum words per cue (default 3, allowed 1–10), and an integer revision. The track model allows translated tracks in work package 3 without changing the word-editor contract.
+- `transcript_words`: immutable `id`, `videoId`, generation, `segmentId`, order, text, absolute video start/end, and `needsReview`. `segments` remains the input to hook detection. A new transcription adds a new generation without changing words already used by clips.
+- `subtitle_tracks`: `id`, `clipId`, language, kind (`original` initially), pinned source generation, display mode (`grouped` or `karaoke`), maximum words per cue (default 3, allowed 1–10), and an integer revision. The track model allows translated tracks in work package 3 without changing the word-editor contract.
 - `subtitle_words`: stable `id`, `trackId`, order, text, absolute video start/end, `breakAfter`, `needsReview`, and nullable source-word reference. These rows are the editable copy for one clip.
 - `subtitle_word_imports`: unique `(trackId, sourceWordId)` records which source words have ever been copied into a track. This record survives edits, merges, and deletion so a trim change cannot resurrect a removed word.
 
@@ -45,7 +45,7 @@ The server exposes one versioned read/write contract for the track and its words
 
 Creating a clip copies overlapping source words into its original track when word alignment is available; otherwise the existing segment subtitle path remains available and the editor offers conversion later. Expanding a word-backed clip imports source words from the newly visible interval that do not appear in `subtitle_word_imports`; it never rewrites existing editable words. Shrinking only hides out-of-range words. Re-expanding reveals the same edits. Import and trim updates are transactional.
 
-Existing `clip_subtitles` rows remain untouched until the user accepts a conversion. On opening an old clip, the editor offers a draft that splits its current edited text into words and distributes each row's existing time across those words. It preserves text and cue order, marks approximate times for review, and shows the draft before save. The user can instead request fresh Whisper-aligned words, compare the resulting text to the edited rows, and explicitly accept replacement. Conversion records source words already covered by the original clip range as imported, including words the user had removed, so later trim changes cannot reintroduce them. Declining either path leaves the old subtitle data and export behavior intact. Saving a converted track does not delete the old rows until the later renderer/export migration is complete.
+Existing `clip_subtitles` rows remain untouched until the user accepts a conversion. On opening an old clip, the editor offers a draft that splits its current edited text into words and distributes each row's existing time across those words. It preserves text and cue order, marks approximate times for review, and shows the draft before save. The user can instead request fresh Whisper-aligned words, compare the resulting text to the edited rows, and explicitly accept replacement. Conversion records source words already covered by the original clip range as imported, including words the user had removed, so later trim changes cannot reintroduce them. A converted track pins the chosen source generation even if the video is later retranscribed. Declining either path leaves the old subtitle data and export behavior intact. Saving a converted track does not delete the old rows until the later renderer/export migration is complete.
 
 ## Boundaries and validation
 
