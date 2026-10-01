@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { parseProbe, needsTranscode, parseSceneTimestamps, parseLoudnorm, buildExportArgs } from '../src'
+import { parseProbe, needsTranscode, parseSceneTimestamps, parseLoudnorm, buildExportArgs, escapeFfmpegFilterValue } from '../src'
 
 it('parseProbe reads duration/resolution/codecs', () => {
   const j = JSON.stringify({ format: { duration: '120.5' }, streams: [
@@ -21,15 +21,30 @@ it('parseLoudnorm reads the json block from stderr', () => {
   expect(parseLoudnorm(stderr).input_i).toBe('-23.6')
 })
 
+it('escapes special characters in FFmpeg filter values at both syntax levels', () => {
+  const slash = '\\'
+  expect(escapeFfmpegFilterValue('C:\\Media Files\\shot.ass'))
+    .toBe(['C', slash.repeat(2), ':', slash.repeat(4), 'Media Files', slash.repeat(4), 'shot.ass'].join(''))
+  expect(escapeFfmpegFilterValue('a,b')).toBe('a\\,b')
+  expect(escapeFfmpegFilterValue('a:b')).toBe('a\\\\:b')
+  expect(escapeFfmpegFilterValue('a[b];c')).toBe('a\\[b\\]\\;c')
+  expect(escapeFfmpegFilterValue("editor's")).toBe(`editor${slash.repeat(3)}'s`)
+  expect(escapeFfmpegFilterValue('a\\b')).toBe('a\\\\\\\\b')
+  expect(escapeFfmpegFilterValue('ช็อต.ass')).toBe('ช็อต.ass')
+})
+
 it('buildExportArgs: 9:16 crop honours cropOffset and burns ass', () => {
   const args = buildExportArgs({ input: 'in.mp4', start: 10, end: 20, aspect: '9:16', cropOffset: 0.5,
-    assPath: 's.ass', fontsDir: 'assets/fonts',
+    assPath: 's, [final].ass', fontsDir: 'assets/fonts:ช็อต',
     loudnorm: { input_i: '-23.6', input_tp: '-6.5', input_lra: '5.9', input_thresh: '-34.0', target_offset: '0.3' },
     output: 'out.mp4' })
   const vf = args[args.indexOf('-vf') + 1]
   expect(vf).toContain("crop=ih*9/16:ih:(iw-ih*9/16)/2*(1+0.5):0")
   expect(vf).toContain('scale=1080:1920')
-  expect(vf).toContain("ass=s.ass:fontsdir=assets/fonts")
+  expect(vf).toContain(String.raw`ass=s\, \[final\].ass:fontsdir=assets/fonts`);
+  expect(vf).toContain('\\\\:ช็อต')
+  expect(args[args.indexOf('-i') + 1]).toBe('in.mp4')
+  expect(args.at(-1)).toBe('out.mp4')
   const af = args[args.indexOf('-af') + 1]
   expect(af).toContain('measured_I=-23.6')
 })
