@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { isSystemReady } from '@/lib/system-readiness'
 import { useEvents } from '@/lib/use-events'
 
 type Doctor = {
@@ -10,6 +11,7 @@ type Doctor = {
   ffprobe: boolean
   whisper: boolean
   libass: boolean
+  libx264: boolean
   model: { name: string; downloaded: boolean }
   models: { name: string; downloaded: boolean }[]
   acceleration: string
@@ -121,10 +123,8 @@ export default function SetupPage() {
   const binariesOk = !!doctor?.ffmpeg && !!doctor?.ffprobe
   const whisperOk = !!doctor?.whisper
   const libassOk = !!doctor?.libass
-  // Subtitle burning needs libass, but the app is otherwise fully usable without it
-  // (see app-shell.tsx's `ready` calc for the same call) — so it's shown as a warning
-  // row here, not a blocker for "เริ่มใช้งาน ShotPrompt →".
-  const allPassed = !checking && binariesOk && whisperOk && modelDownloaded
+  const libx264Ok = !!doctor?.libx264
+  const allPassed = !checking && !!doctor && isSystemReady({ ...doctor, model: { downloaded: modelDownloaded } })
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg px-6 py-10">
@@ -132,6 +132,14 @@ export default function SetupPage() {
         <div className="flex flex-col items-center gap-2.5 text-center">
           <div className="flex h-11 w-11 items-center justify-center rounded-[13px] bg-accent pl-0.5 text-base text-white">
             ▶
+          </div>
+
+          <div className="flex items-center gap-3 rounded-[10px] border border-line bg-surface2 px-3.5 py-2.5">
+            <StatusDot ok={libx264Ok} />
+            <div className="flex-1 font-mono text-[13px]">libx264</div>
+            <div className={`text-[11.5px] ${libx264Ok ? 'text-dim' : 'text-err'}`}>
+              {libx264Ok ? 'พร้อม export วิดีโอ' : 'ไม่รองรับการ export วิดีโอ'}
+            </div>
           </div>
           <div className="text-xl font-bold">ติดตั้ง ShotPrompt</div>
           <div className="-mt-1 text-[13px] text-muted">
@@ -168,7 +176,7 @@ export default function SetupPage() {
             <StatusDot ok={libassOk} warnWhenMissing />
             <div className="flex-1 font-mono text-[13px]">libass</div>
             <div className={`text-[11.5px] ${libassOk ? 'text-dim' : 'text-warn'}`}>
-              {libassOk ? 'รองรับการฝัง subtitle' : 'จำเป็นสำหรับการฝัง subtitle'}
+              {libassOk ? 'รองรับการฝัง subtitle' : 'ไม่รองรับการฝัง subtitle (ไม่บล็อกการใช้งาน)'}
             </div>
           </div>
 
@@ -268,7 +276,7 @@ export default function SetupPage() {
               : 'ตรวจสอบอีกครั้ง'}
         </button>
         <div className="-mt-2 text-center text-[11.5px] text-faint">
-          ตรวจจาก PATH ของเครื่อง · Apple Silicon ใช้ Metal GPU อัตโนมัติ
+          ตรวจจาก PATH ของเครื่อง · สถานะการเร่งด้วย GPU: {doctor?.acceleration === 'unverified' ? 'ยังไม่ยืนยัน' : 'ยังไม่ทราบ'}
         </div>
       </div>
     </div>

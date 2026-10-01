@@ -18,8 +18,8 @@ On macOS, the quickest path is:
 brew install ffmpeg-full whisper-cpp && brew link --overwrite ffmpeg-full
 ```
 
-Apple Silicon Macs get GPU-accelerated transcription via Metal automatically — no
-extra configuration needed.
+Whisper GPU acceleration depends on the installed binary and is reported as
+unverified; ShotPrompt does not infer an active backend from the operating system.
 
 ### A caveat: Homebrew's plain `ffmpeg` is missing subtitle-burning support
 
@@ -70,7 +70,10 @@ shows a command you can copy. It never runs an installer automatically.
 
 Setup only shows commands for you to copy; it does not run installers. After installing
 or changing `PATH`, restart ShotPrompt, then use the Setup page’s “ตรวจสอบอีกครั้ง”
-button. It checks `ffmpeg`, `ffprobe`, `whisper-cli`, and subtitle burn-in support.
+button. It checks that `ffmpeg`, `ffprobe`, and `whisper-cli` run successfully, that
+FFmpeg includes the `libx264` encoder required for export, and reports subtitle
+burn-in support as an optional `libass` capability. Whisper GPU acceleration is shown
+as unverified.
 
 ## Setup
 
@@ -87,15 +90,16 @@ This starts both the API server (`127.0.0.1:3001`) and the web app
 On first launch (or whenever a required binary/model is missing), the app does **not**
 redirect you away — the Library page still renders normally underneath. Instead, the
 header shows a red status chip ("ต้องติดตั้งเพิ่ม") that links to a **Setup** screen
-(`/setup`), which checks `ffmpeg`, `ffprobe`, `whisper-cli`, and the `libass`
-capability from your machine's `PATH`, shows the `brew install` command with a copy
+(`/setup`), which checks working `ffmpeg`, `ffprobe`, `whisper-cli`, the `libx264`
+encoder, and the optional `libass` capability from your machine's `PATH`, shows an
+OS/package-manager-specific command with a copy
 button, and lets you download the transcription model (`large-v3` by default, ~3.1 GB
-— resumable if the download drops mid-way). Once `ffmpeg`/`ffprobe`/`whisper-cli` are
-found and the model is downloaded, the button becomes "เริ่มใช้งาน ShotPrompt →" and
+— resumable if the download drops mid-way). Once the required tools and model are
+verified, the button becomes "เริ่มใช้งาน ShotPrompt →" and
 takes you into the app, and the header chip turns into a green "ระบบพร้อม" indicator.
-(`libass` is checked and shown there and on the Settings page too, but — since the app
-is otherwise fully usable without subtitle burning — it does not block that
-transition; see the subtitle-burning caveat above.)
+(`libass` is checked and shown there and on the Settings page too, but is optional and
+does not block that transition; see the subtitle-burning caveat above. GPU acceleration
+is reported as unverified.)
 
 You can revisit these checks any time from **Settings** (`/settings`), which also
 lets you switch transcription models and manage disk usage (deleting videos/exports

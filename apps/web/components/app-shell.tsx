@@ -3,11 +3,13 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { isSystemReady } from '@/lib/system-readiness'
 
 type Doctor = {
   ffmpeg: boolean
   ffprobe: boolean
   whisper: boolean
+  libx264: boolean
   libass: boolean
   model: { name: string; downloaded: boolean }
   models: { name: string; downloaded: boolean }[]
@@ -44,14 +46,7 @@ export function AppShell({
     }
   }, [])
 
-  const ready =
-    checked &&
-    !!doctor &&
-    doctor.ffmpeg &&
-    doctor.ffprobe &&
-    doctor.whisper &&
-    doctor.model.downloaded
-  const accelLabel = doctor?.acceleration?.startsWith('metal') ? 'Metal GPU' : 'CPU'
+  const ready = checked && !!doctor && isSystemReady(doctor)
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -92,7 +87,7 @@ export function AppShell({
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors hover:bg-line2"
           >
             <span className="h-[7px] w-[7px] animate-pulse rounded-full bg-ok" />
-            <span className="text-[12.5px] text-muted">ระบบพร้อม · {accelLabel}</span>
+            <span className="text-[12.5px] text-muted">ระบบพร้อม · GPU: ยังไม่ยืนยัน</span>
           </Link>
         ) : (
           <Link
