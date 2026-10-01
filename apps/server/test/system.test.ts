@@ -76,6 +76,52 @@ describe('getInstallGuide', () => {
     expect(guide.commands).toEqual([])
     expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
   })
+
+  it('uses Linux Homebrew before distro package managers', () => {
+    const guide = getInstallGuide('linux', 'x64', command => ['brew', 'apt-get', 'pacman'].includes(command))
+
+    expect(guide.manager).toBe('homebrew')
+    expect(guide.commands).toEqual(['brew install ffmpeg-full whisper-cpp && brew link --overwrite ffmpeg-full'])
+  })
+
+  it('uses apt-get for FFmpeg and explains Whisper needs a separate install', () => {
+    const guide = getInstallGuide('linux', 'x64', command => command === 'apt-get')
+
+    expect(guide.manager).toBe('apt-get')
+    expect(guide.commands).toEqual(['sudo apt-get update && sudo apt-get install -y ffmpeg'])
+    expect(guide.note).toContain('whisper-cli')
+    expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
+  })
+
+  it('uses pacman for supported x64 Linux hosts', () => {
+    const guide = getInstallGuide('linux', 'x64', command => command === 'pacman')
+
+    expect(guide.manager).toBe('pacman')
+    expect(guide.commands).toEqual(['sudo pacman -S --needed ffmpeg whisper-cpp'])
+  })
+
+  it('prioritizes Scoop over WinGet on Windows', () => {
+    const guide = getInstallGuide('win32', 'x64', command => ['scoop', 'winget'].includes(command))
+
+    expect(guide.manager).toBe('scoop')
+    expect(guide.commands).toEqual(['scoop install ffmpeg whisper-cpp'])
+  })
+
+  it('uses manual guidance when WinGet is the only manager on Windows ARM64', () => {
+    const guide = getInstallGuide('win32', 'arm64', command => command === 'winget')
+
+    expect(guide.manager).toBe('manual')
+    expect(guide.commands).toEqual([])
+    expect(guide.note).toContain('whisper-cli.exe')
+    expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
+  })
+
+  it('uses manual guidance for pacman on unsupported Linux architectures', () => {
+    const guide = getInstallGuide('linux', 'arm64', command => command === 'pacman')
+
+    expect(guide.manager).toBe('manual')
+    expect(guide.commands).toEqual([])
+  })
 })
 
 describe('system routes', () => {

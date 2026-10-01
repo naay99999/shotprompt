@@ -16,7 +16,7 @@ type Doctor = {
   installGuide: {
     platform: 'macos' | 'linux' | 'windows' | 'unknown'
     architecture: string
-    manager: 'homebrew' | 'scoop' | 'winget' | 'manual'
+    manager: 'homebrew' | 'apt-get' | 'pacman' | 'scoop' | 'winget' | 'manual'
     commands: string[]
     note: string
     manualUrl: string
@@ -192,6 +192,7 @@ export default function SetupPage() {
               </div>
             )}
             <div className="text-[11.5px] text-dim">{installGuide?.note ?? 'กำลังตรวจหาระบบปฏิบัติการและเครื่องมือที่ใช้ติดตั้ง…'}</div>
+            <div className="text-[11.5px] text-dim">หลังติดตั้งหรือเปลี่ยน PATH ให้ปิดและเปิด ShotPrompt ใหม่ก่อนกดตรวจสอบอีกครั้ง</div>
             {installGuide && (
               <a href={installGuide.manualUrl} target="_blank" rel="noreferrer" className="w-fit text-[11.5px] text-accent hover:underline">
                 เปิดคู่มือติดตั้ง →

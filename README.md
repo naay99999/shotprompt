@@ -48,9 +48,8 @@ brew link --overwrite ffmpeg-full
 ```
 
 `ffmpeg-full` is keg-only, so the `--overwrite` link is required — it repoints the
-`ffmpeg`/`ffprobe`/`ffplay` symlinks at the `-full` build. No server/app restart is
-needed afterward; the doctor check (`GET /system/doctor`) spawns `ffmpeg` fresh each
-time, so it picks up the new binary on the next check. Note that a later
+`ffmpeg`/`ffprobe`/`ffplay` symlinks at the `-full` build. Restart ShotPrompt after
+installing or relinking binaries, then recheck Setup. Note that a later
 `brew upgrade ffmpeg` (the plain formula) can silently re-link over this — if libass
 disappears again, just re-run the `brew link --overwrite` command above.
 
@@ -59,17 +58,19 @@ disappears again, just re-run the `brew link --overwrite` command above.
 The Setup page detects the OS, CPU architecture, and available package manager, then
 shows a command you can copy. It never runs an installer automatically.
 
-- **Linux:** If Homebrew is installed, use the displayed Homebrew command. Otherwise,
-  install an `ffmpeg` build with libass and the `whisper-cli` binary from your
-  distribution or the [Whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases),
-  then add both to `PATH`.
-- **Windows:** With Scoop installed, use `scoop install ffmpeg whisper-cpp`. With
-  WinGet, Setup installs FFmpeg with `winget install --id Gyan.FFmpeg --exact` and
-  links to the Whisper.cpp release needed for `whisper-cli.exe`; add that folder to
-  your user `PATH` and open a new terminal.
+- **Linux:** Setup prefers Homebrew, then `apt-get`, then `pacman` on x64. On Debian
+  or Ubuntu, copy `sudo apt-get update && sudo apt-get install -y ffmpeg`; install
+  `whisper-cli` separately from the [Whisper.cpp releases](https://github.com/ggml-org/whisper.cpp/releases).
+  On x64 Arch Linux, copy `sudo pacman -S --needed ffmpeg whisper-cpp`. If no
+  supported manager is detected, install FFmpeg with libass and Whisper.cpp manually.
+- **Windows:** Setup prefers Scoop (`scoop install ffmpeg whisper-cpp`). On x64 with
+  WinGet, copy `winget install --id Gyan.FFmpeg --exact` and install
+  `whisper-cli.exe` separately from the Whisper.cpp releases. Other architectures or
+  hosts without a supported manager use the manual release guidance.
 
-Use the Setup page’s “ตรวจสอบอีกครั้ง” button after installing. It verifies
-`ffmpeg`, `ffprobe`, `whisper-cli`, and whether subtitle burn-in support is present.
+Setup only shows commands for you to copy; it does not run installers. After installing
+or changing `PATH`, restart ShotPrompt, then use the Setup page’s “ตรวจสอบอีกครั้ง”
+button. It checks `ffmpeg`, `ffprobe`, `whisper-cli`, and subtitle burn-in support.
 
 ## Setup
 

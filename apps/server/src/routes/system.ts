@@ -52,7 +52,7 @@ const MODEL_NAME_PATTERN = /^[\w.-]+$/
 const KNOWN_MODELS = ['large-v3', 'medium']
 
 type Platform = 'macos' | 'linux' | 'windows' | 'unknown'
-type PackageManager = 'homebrew' | 'scoop' | 'winget' | 'manual'
+type PackageManager = 'homebrew' | 'apt-get' | 'pacman' | 'scoop' | 'winget' | 'manual'
 
 export type InstallGuide = {
   platform: Platform
@@ -86,6 +86,22 @@ export function getInstallGuide(
         note: 'ใช้ Homebrew บน Linux เพื่อให้ได้ ffmpeg ที่มี libass และ whisper-cli', manualUrl: HOMEBREW_URL,
       }
     }
+    if (hasCommand('apt-get')) {
+      return {
+        platform: 'linux', architecture, manager: 'apt-get',
+        commands: ['sudo apt-get update && sudo apt-get install -y ffmpeg'],
+        note: 'ติดตั้ง whisper-cli แยกจาก Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH จากนั้นเริ่ม ShotPrompt ใหม่',
+        manualUrl: WHISPER_RELEASES_URL,
+      }
+    }
+    if (architecture === 'x64' && hasCommand('pacman')) {
+      return {
+        platform: 'linux', architecture, manager: 'pacman',
+        commands: ['sudo pacman -S --needed ffmpeg whisper-cpp'],
+        note: 'ติดตั้งแล้วเริ่ม ShotPrompt ใหม่เพื่อให้ระบบตรวจ PATH อีกครั้ง',
+        manualUrl: WHISPER_RELEASES_URL,
+      }
+    }
     return {
       platform: 'linux', architecture, manager: 'manual', commands: [],
       note: 'ติดตั้ง ffmpeg ที่มี libass และ whisper.cpp (คำสั่ง whisper-cli) ตามคู่มือของ Linux distribution ที่ใช้งาน',
@@ -97,19 +113,19 @@ export function getInstallGuide(
     if (hasCommand('scoop')) {
       return {
         platform: 'windows', architecture, manager: 'scoop', commands: ['scoop install ffmpeg whisper-cpp'],
-        note: 'เปิด terminal ใหม่หลังติดตั้งเพื่อให้ PATH อัปเดต', manualUrl: WHISPER_RELEASES_URL,
+        note: 'ติดตั้งแล้วเริ่ม ShotPrompt ใหม่เพื่อให้ระบบตรวจ PATH อีกครั้ง', manualUrl: WHISPER_RELEASES_URL,
       }
     }
-    if (hasCommand('winget')) {
+    if (architecture === 'x64' && hasCommand('winget')) {
       return {
         platform: 'windows', architecture, manager: 'winget', commands: ['winget install --id Gyan.FFmpeg --exact'],
-        note: 'ติดตั้ง whisper-cli จาก Whisper.cpp releases ตามลิงก์ด้านล่าง แล้วเพิ่มโฟลเดอร์ที่มี whisper-cli.exe ลง PATH',
+        note: 'ติดตั้ง whisper-cli จาก Whisper.cpp releases ตามลิงก์ด้านล่าง แล้วเพิ่มโฟลเดอร์ที่มี whisper-cli.exe ลง PATH จากนั้นเริ่ม ShotPrompt ใหม่',
         manualUrl: WHISPER_RELEASES_URL,
       }
     }
     return {
       platform: 'windows', architecture, manager: 'manual', commands: [],
-      note: 'ติดตั้ง FFmpeg และ whisper-cli.exe ด้วย package manager หรือ Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH',
+      note: 'ติดตั้ง FFmpeg และ whisper-cli.exe ด้วย package manager หรือ Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH จากนั้นเริ่ม ShotPrompt ใหม่',
       manualUrl: WHISPER_RELEASES_URL,
     }
   }
