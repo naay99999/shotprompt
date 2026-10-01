@@ -167,21 +167,28 @@ const systemRuntime: SystemRuntime = {
   platform: process.platform,
   architecture: process.arch,
   hasCommand: command => Bun.which(command) !== null,
-  async run(command, args, timeoutMs) {
-    const proc = Bun.spawn([command, ...args], { stdout: 'pipe', stderr: 'pipe' })
-    const stdout = new Response(proc.stdout).text()
-    const stderr = new Response(proc.stderr).text()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const didTimeout = await Promise.race([
-      proc.exited.then(() => false),
-      new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(true), timeoutMs) }),
-    ])
-    if (timer) clearTimeout(timer)
-    if (didTimeout) proc.kill()
-    const exitCode = await proc.exited
-    const [out, err] = await Promise.all([stdout, stderr])
-    return { exitCode: didTimeout ? null : exitCode, stdout: out, stderr: err, timedOut: didTimeout }
-  },
+  run: runSystemProcess,
+}
+
+export async function runSystemProcess(command: string, args: string[], timeoutMs: number): Promise<SystemProbeResult> {
+  const proc = Bun.spawn([command, ...args], { stdout: 'pipe', stderr: 'pipe' })
+  const completed = Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const outcome = await Promise.race([
+    completed.then(([exitCode, stdout, stderr]) => ({ exitCode, stdout, stderr, timedOut: false as const })),
+    new Promise<{ timedOut: true }>(resolve => { timer = setTimeout(() => resolve({ timedOut: true }), timeoutMs) }),
+  ])
+  if (timer) clearTimeout(timer)
+  if ('timedOut' in outcome) {
+    proc.kill('SIGKILL')
+    void completed.catch(() => {})
+    return { exitCode: null, stdout: '', stderr: '', timedOut: true }
+  }
+  return outcome
 }
 
 export function parseLibx264Support(encodersOutput: string): boolean {

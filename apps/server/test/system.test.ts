@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { getInstallGuide, parseLibassSupport } from '../src/routes/system'
+import { getInstallGuide, parseLibassSupport, runSystemProcess } from '../src/routes/system'
 import { createTestApp } from './helpers/app'
 
 const app = () => createTestApp().app
@@ -125,6 +125,20 @@ describe('getInstallGuide', () => {
 })
 
 describe('system routes', () => {
+  it('returns promptly when a process ignores normal termination after the deadline', async () => {
+    const deadlineMs = 1500
+    const startedAt = Date.now()
+    const result = await Promise.race([
+      runSystemProcess(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setTimeout(() => process.exit(0), 3000)"], 100),
+      Bun.sleep(deadlineMs).then(() => null),
+    ])
+
+    expect(result).not.toBeNull()
+    expect(result?.timedOut).toBe(true)
+    expect(result?.exitCode).toBeNull()
+    expect(Date.now() - startedAt).toBeLessThan(deadlineMs)
+  })
+
   it('uses injected command probes and reports only verified capabilities', async () => {
     const runtime = {
       platform: 'win32', architecture: 'arm64', hasCommand: () => false,

@@ -41,10 +41,19 @@ it('buildExportArgs: 9:16 crop honours cropOffset and burns ass', () => {
   const vf = args[args.indexOf('-vf') + 1]
   expect(vf).toContain("crop=ih*9/16:ih:(iw-ih*9/16)/2*(1+0.5):0")
   expect(vf).toContain('scale=1080:1920')
-  expect(vf).toContain(String.raw`ass=s\, \[final\].ass:fontsdir=assets/fonts`);
+  expect(vf).toContain(String.raw`ass=filename=s\, \[final\].ass:fontsdir=assets/fonts`);
   expect(vf).toContain('\\\\:ช็อต')
   expect(args[args.indexOf('-i') + 1]).toBe('in.mp4')
   expect(args.at(-1)).toBe('out.mp4')
   const af = args[args.indexOf('-af') + 1]
   expect(af).toContain('measured_I=-23.6')
+})
+
+it('uses the named ASS filename option for paths containing equals signs', () => {
+  const args = buildExportArgs({ input: 'in.mp4', start: 0, end: 1, aspect: 'original', cropOffset: 0,
+    assPath: '/tmp/a=b/shot.ass', fontsDir: '/tmp/fonts=x',
+    loudnorm: { input_i: '-23', input_tp: '-1', input_lra: '5', input_thresh: '-34', target_offset: '0' },
+    output: 'out.mp4' })
+
+  expect(args[args.indexOf('-vf') + 1]).toBe('ass=filename=/tmp/a=b/shot.ass:fontsdir=/tmp/fonts=x')
 })
