@@ -149,37 +149,84 @@ export function parseLibassSupport(filtersOutput: string): boolean {
   })
 }
 
-async function checkLibass(): Promise<boolean> {
-  if (Bun.which('ffmpeg') === null) return false
+export type SystemProbeResult = {
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  timedOut: boolean
+}
+
+export type SystemRuntime = {
+  platform: string
+  architecture: string
+  hasCommand(command: string): boolean
+  run(command: string, args: string[], timeoutMs: number): Promise<SystemProbeResult>
+}
+
+const systemRuntime: SystemRuntime = {
+  platform: process.platform,
+  architecture: process.arch,
+  hasCommand: command => Bun.which(command) !== null,
+  async run(command, args, timeoutMs) {
+    const proc = Bun.spawn([command, ...args], { stdout: 'pipe', stderr: 'pipe' })
+    const stdout = new Response(proc.stdout).text()
+    const stderr = new Response(proc.stderr).text()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const didTimeout = await Promise.race([
+      proc.exited.then(() => false),
+      new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(true), timeoutMs) }),
+    ])
+    if (timer) clearTimeout(timer)
+    if (didTimeout) proc.kill()
+    const exitCode = await proc.exited
+    const [out, err] = await Promise.all([stdout, stderr])
+    return { exitCode: didTimeout ? null : exitCode, stdout: out, stderr: err, timedOut: didTimeout }
+  },
+}
+
+export function parseLibx264Support(encodersOutput: string): boolean {
+  return encodersOutput.split('\n').some(line => line.trim().split(/\s+/)[1] === 'libx264')
+}
+
+const PROBE_TIMEOUT_MS = 10_000
+
+async function runProbe(runtime: SystemRuntime, command: string, args: string[]): Promise<SystemProbeResult | null> {
+  if (!runtime.hasCommand(command)) return null
   try {
-    const proc = Bun.spawn(['ffmpeg', '-filters'], { stdout: 'pipe', stderr: 'ignore' })
-    const out = await new Response(proc.stdout).text()
-    await proc.exited
-    return parseLibassSupport(out)
+    const result = await runtime.run(command, args, PROBE_TIMEOUT_MS)
+    return result.exitCode === 0 && !result.timedOut ? result : null
   } catch {
-    return false
+    return null
   }
 }
 
-export const systemRoutes = (db: DB) => new Elysia()
+export const systemRoutes = (db: DB, runtime: SystemRuntime = systemRuntime) => new Elysia()
   .get('/system/doctor', async () => {
     const model = getSetting(db, 'whisperModel', 'large-v3')
     const modelNames = [...new Set([...KNOWN_MODELS, model])]
+    const [ffmpeg, ffprobe, whisper, filters, encoders] = await Promise.all([
+      runProbe(runtime, 'ffmpeg', ['-version']),
+      runProbe(runtime, 'ffprobe', ['-version']),
+      runProbe(runtime, 'whisper-cli', ['--help']),
+      runProbe(runtime, 'ffmpeg', ['-filters']),
+      runProbe(runtime, 'ffmpeg', ['-encoders']),
+    ])
     return {
-      ffmpeg: Bun.which('ffmpeg') !== null,
-      ffprobe: Bun.which('ffprobe') !== null,
-      whisper: Bun.which('whisper-cli') !== null,
+      ffmpeg: ffmpeg !== null,
+      ffprobe: ffprobe !== null,
+      whisper: whisper !== null,
       // Homebrew's default ffmpeg build commonly omits libass, silently breaking the
       // "burn subtitles" export path — surfaced separately from ffmpeg/ffprobe presence
       // since a user can have a perfectly working install that still lacks this.
-      libass: await checkLibass(),
+      libass: filters !== null && parseLibassSupport(filters.stdout),
+      libx264: encoders !== null && parseLibx264Support(encoders.stdout),
       model: { name: model, downloaded: existsSync(modelPath(model)) },
       // Per-model download state, needed so the Settings page can show "ดาวน์โหลดแล้ว" /
       // download-progress for both selectable models independently of which one is
       // currently active (the `model` field above only ever reflects the active one).
       models: modelNames.map(name => ({ name, downloaded: existsSync(modelPath(name)) })),
-      acceleration: process.platform === 'darwin' && process.arch === 'arm64' ? 'metal (homebrew default)' : 'cpu',
-      installGuide: getInstallGuide(process.platform, process.arch, command => Bun.which(command) !== null),
+      acceleration: 'unverified',
+      installGuide: getInstallGuide(runtime.platform, runtime.architecture, command => runtime.hasCommand(command)),
     }
   })
   .get('/system/disk-usage', () => ({
