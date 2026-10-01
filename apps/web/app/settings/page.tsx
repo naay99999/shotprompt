@@ -12,6 +12,7 @@ type Doctor = {
   ffprobe: boolean
   whisper: boolean
   libass: boolean
+  libx264: boolean
   model: { name: string; downloaded: boolean }
   models: { name: string; downloaded: boolean }[]
   acceleration: string
@@ -139,12 +140,14 @@ export default function SettingsPage() {
         { name: 'ffmpeg', ok: doctor.ffmpeg, detail: doctor.ffmpeg ? 'พบใน PATH' : 'ไม่พบใน PATH' },
         { name: 'ffprobe', ok: doctor.ffprobe, detail: doctor.ffprobe ? 'พบใน PATH' : 'ไม่พบใน PATH' },
         { name: 'whisper-cli', ok: doctor.whisper, detail: doctor.whisper ? 'พบใน PATH' : 'ไม่พบใน PATH' },
+        { name: 'libx264', ok: doctor.libx264, detail: doctor.libx264 ? 'พร้อม export วิดีโอ' : 'ไม่รองรับการ export วิดีโอ' },
         {
           name: 'libass',
           ok: doctor.libass,
-          detail: doctor.libass ? 'รองรับการฝัง subtitle' : 'จำเป็นสำหรับการฝัง subtitle',
+          warning: true,
+          detail: doctor.libass ? 'รองรับการฝัง subtitle' : 'ไม่รองรับการฝัง subtitle (ไม่บล็อกการใช้งาน)',
         },
-        { name: 'acceleration', ok: true, detail: doctor.acceleration },
+        { name: 'acceleration', ok: null, detail: doctor.acceleration === 'unverified' ? 'ยังไม่ยืนยัน' : 'ยังไม่ทราบ' },
       ]
     : []
 
@@ -175,10 +178,10 @@ export default function SettingsPage() {
                 >
                   <div
                     className={`flex h-5 w-5 flex-none items-center justify-center rounded-full text-[10.5px] font-bold ${
-                      d.ok ? 'bg-ok/[.13] text-ok' : 'bg-err/[.13] text-err'
+                      d.ok === true ? 'bg-ok/[.13] text-ok' : d.ok === null ? 'bg-line text-faint' : d.warning ? 'bg-warn/[.13] text-warn' : 'bg-err/[.13] text-err'
                     }`}
                   >
-                    {d.ok ? '✓' : '✕'}
+                    {d.ok === true ? '✓' : d.ok === null ? '?' : d.warning ? '!' : '✕'}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-mono text-[13px]">{d.name}</div>

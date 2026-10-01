@@ -52,7 +52,7 @@ const MODEL_NAME_PATTERN = /^[\w.-]+$/
 const KNOWN_MODELS = ['large-v3', 'medium']
 
 type Platform = 'macos' | 'linux' | 'windows' | 'unknown'
-type PackageManager = 'homebrew' | 'scoop' | 'winget' | 'manual'
+type PackageManager = 'homebrew' | 'apt-get' | 'pacman' | 'scoop' | 'winget' | 'manual'
 
 export type InstallGuide = {
   platform: Platform
@@ -86,6 +86,22 @@ export function getInstallGuide(
         note: 'ใช้ Homebrew บน Linux เพื่อให้ได้ ffmpeg ที่มี libass และ whisper-cli', manualUrl: HOMEBREW_URL,
       }
     }
+    if (hasCommand('apt-get')) {
+      return {
+        platform: 'linux', architecture, manager: 'apt-get',
+        commands: ['sudo apt-get update && sudo apt-get install -y ffmpeg'],
+        note: 'ติดตั้ง whisper-cli แยกจาก Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH จากนั้นเริ่ม ShotPrompt ใหม่',
+        manualUrl: WHISPER_RELEASES_URL,
+      }
+    }
+    if (architecture === 'x64' && hasCommand('pacman')) {
+      return {
+        platform: 'linux', architecture, manager: 'pacman',
+        commands: ['sudo pacman -S --needed ffmpeg whisper-cpp'],
+        note: 'ติดตั้งแล้วเริ่ม ShotPrompt ใหม่เพื่อให้ระบบตรวจ PATH อีกครั้ง',
+        manualUrl: WHISPER_RELEASES_URL,
+      }
+    }
     return {
       platform: 'linux', architecture, manager: 'manual', commands: [],
       note: 'ติดตั้ง ffmpeg ที่มี libass และ whisper.cpp (คำสั่ง whisper-cli) ตามคู่มือของ Linux distribution ที่ใช้งาน',
@@ -97,19 +113,19 @@ export function getInstallGuide(
     if (hasCommand('scoop')) {
       return {
         platform: 'windows', architecture, manager: 'scoop', commands: ['scoop install ffmpeg whisper-cpp'],
-        note: 'เปิด terminal ใหม่หลังติดตั้งเพื่อให้ PATH อัปเดต', manualUrl: WHISPER_RELEASES_URL,
+        note: 'ติดตั้งแล้วเริ่ม ShotPrompt ใหม่เพื่อให้ระบบตรวจ PATH อีกครั้ง', manualUrl: WHISPER_RELEASES_URL,
       }
     }
-    if (hasCommand('winget')) {
+    if (architecture === 'x64' && hasCommand('winget')) {
       return {
         platform: 'windows', architecture, manager: 'winget', commands: ['winget install --id Gyan.FFmpeg --exact'],
-        note: 'ติดตั้ง whisper-cli จาก Whisper.cpp releases ตามลิงก์ด้านล่าง แล้วเพิ่มโฟลเดอร์ที่มี whisper-cli.exe ลง PATH',
+        note: 'ติดตั้ง whisper-cli จาก Whisper.cpp releases ตามลิงก์ด้านล่าง แล้วเพิ่มโฟลเดอร์ที่มี whisper-cli.exe ลง PATH จากนั้นเริ่ม ShotPrompt ใหม่',
         manualUrl: WHISPER_RELEASES_URL,
       }
     }
     return {
       platform: 'windows', architecture, manager: 'manual', commands: [],
-      note: 'ติดตั้ง FFmpeg และ whisper-cli.exe ด้วย package manager หรือ Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH',
+      note: 'ติดตั้ง FFmpeg และ whisper-cli.exe ด้วย package manager หรือ Whisper.cpp releases แล้วเพิ่มทั้งสองลง PATH จากนั้นเริ่ม ShotPrompt ใหม่',
       manualUrl: WHISPER_RELEASES_URL,
     }
   }
@@ -133,37 +149,91 @@ export function parseLibassSupport(filtersOutput: string): boolean {
   })
 }
 
-async function checkLibass(): Promise<boolean> {
-  if (Bun.which('ffmpeg') === null) return false
+export type SystemProbeResult = {
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  timedOut: boolean
+}
+
+export type SystemRuntime = {
+  platform: string
+  architecture: string
+  hasCommand(command: string): boolean
+  run(command: string, args: string[], timeoutMs: number): Promise<SystemProbeResult>
+}
+
+const systemRuntime: SystemRuntime = {
+  platform: process.platform,
+  architecture: process.arch,
+  hasCommand: command => Bun.which(command) !== null,
+  run: runSystemProcess,
+}
+
+export async function runSystemProcess(command: string, args: string[], timeoutMs: number): Promise<SystemProbeResult> {
+  const proc = Bun.spawn([command, ...args], { stdout: 'pipe', stderr: 'pipe' })
+  const completed = Promise.all([
+    proc.exited,
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ])
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const outcome = await Promise.race([
+    completed.then(([exitCode, stdout, stderr]) => ({ exitCode, stdout, stderr, timedOut: false as const })),
+    new Promise<{ timedOut: true }>(resolve => { timer = setTimeout(() => resolve({ timedOut: true }), timeoutMs) }),
+  ])
+  if (timer) clearTimeout(timer)
+  if ('timedOut' in outcome) {
+    proc.kill('SIGKILL')
+    void completed.catch(() => {})
+    return { exitCode: null, stdout: '', stderr: '', timedOut: true }
+  }
+  return outcome
+}
+
+export function parseLibx264Support(encodersOutput: string): boolean {
+  return encodersOutput.split('\n').some(line => line.trim().split(/\s+/)[1] === 'libx264')
+}
+
+const PROBE_TIMEOUT_MS = 10_000
+
+async function runProbe(runtime: SystemRuntime, command: string, args: string[]): Promise<SystemProbeResult | null> {
+  if (!runtime.hasCommand(command)) return null
   try {
-    const proc = Bun.spawn(['ffmpeg', '-filters'], { stdout: 'pipe', stderr: 'ignore' })
-    const out = await new Response(proc.stdout).text()
-    await proc.exited
-    return parseLibassSupport(out)
+    const result = await runtime.run(command, args, PROBE_TIMEOUT_MS)
+    return result.exitCode === 0 && !result.timedOut ? result : null
   } catch {
-    return false
+    return null
   }
 }
 
-export const systemRoutes = (db: DB) => new Elysia()
+export const systemRoutes = (db: DB, runtime: SystemRuntime = systemRuntime) => new Elysia()
   .get('/system/doctor', async () => {
     const model = getSetting(db, 'whisperModel', 'large-v3')
     const modelNames = [...new Set([...KNOWN_MODELS, model])]
+    const [ffmpeg, ffprobe, whisper, filters, encoders] = await Promise.all([
+      runProbe(runtime, 'ffmpeg', ['-version']),
+      runProbe(runtime, 'ffprobe', ['-version']),
+      runProbe(runtime, 'whisper-cli', ['--help']),
+      runProbe(runtime, 'ffmpeg', ['-filters']),
+      runProbe(runtime, 'ffmpeg', ['-encoders']),
+    ])
     return {
-      ffmpeg: Bun.which('ffmpeg') !== null,
-      ffprobe: Bun.which('ffprobe') !== null,
-      whisper: Bun.which('whisper-cli') !== null,
+      ffmpeg: ffmpeg !== null,
+      ffprobe: ffprobe !== null,
+      whisper: whisper !== null,
       // Homebrew's default ffmpeg build commonly omits libass, silently breaking the
       // "burn subtitles" export path — surfaced separately from ffmpeg/ffprobe presence
       // since a user can have a perfectly working install that still lacks this.
-      libass: await checkLibass(),
+      libass: filters !== null && parseLibassSupport(filters.stdout),
+      libx264: encoders !== null && parseLibx264Support(encoders.stdout),
       model: { name: model, downloaded: existsSync(modelPath(model)) },
       // Per-model download state, needed so the Settings page can show "ดาวน์โหลดแล้ว" /
       // download-progress for both selectable models independently of which one is
       // currently active (the `model` field above only ever reflects the active one).
       models: modelNames.map(name => ({ name, downloaded: existsSync(modelPath(name)) })),
-      acceleration: process.platform === 'darwin' && process.arch === 'arm64' ? 'metal (homebrew default)' : 'cpu',
-      installGuide: getInstallGuide(process.platform, process.arch, command => Bun.which(command) !== null),
+      acceleration: 'unverified',
+      installGuide: getInstallGuide(runtime.platform, runtime.architecture, command => runtime.hasCommand(command)),
     }
   })
   .get('/system/disk-usage', () => ({

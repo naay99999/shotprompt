@@ -35,6 +35,11 @@ export function parseLoudnorm(stderr: string): LoudnormStats {
   return JSON.parse(m[0])
 }
 
+export function escapeFfmpegFilterValue(value: string): string {
+  const escapedOption = value.replace(/[\\':]/g, character => `\\${character}`)
+  return escapedOption.replace(/[\\'\[\],;]/g, character => `\\${character}`)
+}
+
 function cropFilter(aspect: Aspect, cropOffset: number): string | null {
   if (aspect === '9:16') return `crop=ih*9/16:ih:(iw-ih*9/16)/2*(1+${cropOffset}):0,scale=1080:1920`
   if (aspect === '16:9') return `crop=min(iw\\,ih*16/9):min(ih\\,iw*9/16),scale=1920:1080`
@@ -45,7 +50,7 @@ export function buildExportArgs(opts: { input: string; start: number; end: numbe
   const filters: string[] = []
   const crop = cropFilter(opts.aspect, opts.cropOffset)
   if (crop) filters.push(crop)
-  if (opts.assPath) filters.push(`ass=${opts.assPath}${opts.fontsDir ? `:fontsdir=${opts.fontsDir}` : ''}`)
+  if (opts.assPath) filters.push(`ass=filename=${escapeFfmpegFilterValue(opts.assPath)}${opts.fontsDir ? `:fontsdir=${escapeFfmpegFilterValue(opts.fontsDir)}` : ''}`)
   const ln = opts.loudnorm
   const af = `loudnorm=${LOUDNORM}:measured_I=${ln.input_i}:measured_TP=${ln.input_tp}:measured_LRA=${ln.input_lra}:measured_thresh=${ln.input_thresh}:offset=${ln.target_offset}:linear=true`
   const args = ['-ss', String(opts.start), '-to', String(opts.end), '-i', opts.input]

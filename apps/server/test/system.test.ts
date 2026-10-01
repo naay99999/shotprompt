@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { getInstallGuide, parseLibassSupport } from '../src/routes/system'
+import { getInstallGuide, parseLibassSupport, runSystemProcess } from '../src/routes/system'
 import { createTestApp } from './helpers/app'
 
 const app = () => createTestApp().app
@@ -76,9 +76,155 @@ describe('getInstallGuide', () => {
     expect(guide.commands).toEqual([])
     expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
   })
+
+  it('uses Linux Homebrew before distro package managers', () => {
+    const guide = getInstallGuide('linux', 'x64', command => ['brew', 'apt-get', 'pacman'].includes(command))
+
+    expect(guide.manager).toBe('homebrew')
+    expect(guide.commands).toEqual(['brew install ffmpeg-full whisper-cpp && brew link --overwrite ffmpeg-full'])
+  })
+
+  it('uses apt-get for FFmpeg and explains Whisper needs a separate install', () => {
+    const guide = getInstallGuide('linux', 'x64', command => command === 'apt-get')
+
+    expect(guide.manager).toBe('apt-get')
+    expect(guide.commands).toEqual(['sudo apt-get update && sudo apt-get install -y ffmpeg'])
+    expect(guide.note).toContain('whisper-cli')
+    expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
+  })
+
+  it('uses pacman for supported x64 Linux hosts', () => {
+    const guide = getInstallGuide('linux', 'x64', command => command === 'pacman')
+
+    expect(guide.manager).toBe('pacman')
+    expect(guide.commands).toEqual(['sudo pacman -S --needed ffmpeg whisper-cpp'])
+  })
+
+  it('prioritizes Scoop over WinGet on Windows', () => {
+    const guide = getInstallGuide('win32', 'x64', command => ['scoop', 'winget'].includes(command))
+
+    expect(guide.manager).toBe('scoop')
+    expect(guide.commands).toEqual(['scoop install ffmpeg whisper-cpp'])
+  })
+
+  it('uses manual guidance when WinGet is the only manager on Windows ARM64', () => {
+    const guide = getInstallGuide('win32', 'arm64', command => command === 'winget')
+
+    expect(guide.manager).toBe('manual')
+    expect(guide.commands).toEqual([])
+    expect(guide.note).toContain('whisper-cli.exe')
+    expect(guide.manualUrl).toBe('https://github.com/ggml-org/whisper.cpp/releases')
+  })
+
+  it('uses manual guidance for pacman on unsupported Linux architectures', () => {
+    const guide = getInstallGuide('linux', 'arm64', command => command === 'pacman')
+
+    expect(guide.manager).toBe('manual')
+    expect(guide.commands).toEqual([])
+  })
 })
 
 describe('system routes', () => {
+  it('returns promptly when a process ignores normal termination after the deadline', async () => {
+    const deadlineMs = 1500
+    const startedAt = Date.now()
+    const result = await Promise.race([
+      runSystemProcess(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setTimeout(() => process.exit(0), 3000)"], 100),
+      Bun.sleep(deadlineMs).then(() => null),
+    ])
+
+    expect(result).not.toBeNull()
+    expect(result?.timedOut).toBe(true)
+    expect(result?.exitCode).toBeNull()
+    expect(Date.now() - startedAt).toBeLessThan(deadlineMs)
+  })
+
+  it('uses injected command probes and reports only verified capabilities', async () => {
+    const runtime = {
+      platform: 'win32', architecture: 'arm64', hasCommand: () => false,
+      run: async () => ({ exitCode: null, stdout: '', stderr: '', timedOut: false }),
+    }
+    const res = await createTestApp(runtime).app.handle(new Request('http://x/system/doctor'))
+    const body = await res.json()
+
+    expect(body.ffmpeg).toBe(false)
+    expect(body.ffprobe).toBe(false)
+    expect(body.whisper).toBe(false)
+    expect(body.libass).toBe(false)
+    expect(body.libx264).toBe(false)
+    expect(body.acceleration).toBe('unverified')
+    expect(body.installGuide.platform).toBe('windows')
+    expect(body.installGuide.manager).toBe('manual')
+  })
+
+  it('runs each doctor probe with bounded command arguments', async () => {
+    const calls: [string, string[], number][] = []
+    const runtime = {
+      platform: 'linux', architecture: 'x64', hasCommand: () => true,
+      run: async (command: string, args: string[], timeout: number) => {
+        calls.push([command, args, timeout])
+        return { exitCode: 0, stdout: '', stderr: '', timedOut: false }
+      },
+    }
+    await createTestApp(runtime).app.handle(new Request('http://x/system/doctor'))
+
+    expect(calls).toContainEqual(['ffmpeg', ['-version'], 10_000])
+    expect(calls).toContainEqual(['ffmpeg', ['-filters'], 10_000])
+    expect(calls).toContainEqual(['ffmpeg', ['-encoders'], 10_000])
+    expect(calls).toContainEqual(['ffprobe', ['-version'], 10_000])
+    expect(calls).toContainEqual(['whisper-cli', ['--help'], 10_000])
+  })
+
+  it('returns false capabilities for failed starts, nonzero results, and timeouts without throwing', async () => {
+    const runtime = {
+      platform: 'linux', architecture: 'x64', hasCommand: () => true,
+      run: async (command: string, args: string[]) => {
+        if (command === 'ffmpeg' && args[0] === '-version') throw new Error('spawn failed')
+        if (command === 'ffprobe') return { exitCode: 1, stdout: '', stderr: 'failed', timedOut: false }
+        if (command === 'whisper-cli') return { exitCode: null, stdout: '', stderr: '', timedOut: true }
+        return { exitCode: 0, stdout: '', stderr: '', timedOut: false }
+      },
+    }
+    const res = await createTestApp(runtime).app.handle(new Request('http://x/system/doctor'))
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.ffmpeg).toBe(false)
+    expect(body.ffprobe).toBe(false)
+    expect(body.whisper).toBe(false)
+  })
+
+  it('parses libass and libx264 capabilities from FFmpeg output', async () => {
+    const runtime = {
+      platform: 'darwin', architecture: 'arm64', hasCommand: () => true,
+      run: async (command: string, args: string[]) => ({
+        exitCode: 0, stderr: '', timedOut: false,
+        stdout: command === 'ffmpeg' && args[0] === '-filters' ? FILTERS_WITH_LIBASS
+          : command === 'ffmpeg' && args[0] === '-encoders' ? ' V..... libx264 H.264 encoder' : 'version',
+      }),
+    }
+    const body = await (await createTestApp(runtime).app.handle(new Request('http://x/system/doctor'))).json()
+
+    expect(body.ffmpeg).toBe(true)
+    expect(body.ffprobe).toBe(true)
+    expect(body.whisper).toBe(true)
+    expect(body.libass).toBe(true)
+    expect(body.libx264).toBe(true)
+    expect(body.acceleration).toBe('unverified')
+  })
+
+  it('does not infer capabilities from platform when a command exits unsuccessfully', async () => {
+    const runtime = {
+      platform: 'darwin', architecture: 'arm64', hasCommand: () => true,
+      run: async (_command: string, _args: string[]) => ({ exitCode: 1, stdout: 'libx264', stderr: '', timedOut: false }),
+    }
+    const body = await (await createTestApp(runtime).app.handle(new Request('http://x/system/doctor'))).json()
+
+    expect(body.ffmpeg).toBe(false)
+    expect(body.libx264).toBe(false)
+    expect(body.acceleration).toBe('unverified')
+  })
+
   it('doctor reports binary, libass, and model status', async () => {
     const res = await app().handle(new Request('http://x/system/doctor'))
     const body = await res.json()
