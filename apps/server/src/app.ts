@@ -5,6 +5,8 @@ import { systemRoutes, type SystemRuntime } from './routes/system'
 import { videoRoutes } from './routes/videos'
 import { jobRoutes } from './routes/jobs'
 import { clipRoutes } from './routes/clips'
+import { analysisRoutes } from './routes/analysis'
+import { analysisSettingsRoutes } from './routes/analysis-settings'
 import { exportRoutes } from './routes/exports'
 
 export function createApp(ctx: Ctx, systemRuntime?: SystemRuntime) {
@@ -18,6 +20,8 @@ export function createApp(ctx: Ctx, systemRuntime?: SystemRuntime) {
     .use(systemRoutes(ctx.db, systemRuntime))
     .use(videoRoutes(ctx))
     .use(jobRoutes(ctx))
+    .use(analysisRoutes(ctx))
+    .use(analysisSettingsRoutes(ctx))
     .use(clipRoutes(ctx))
     .use(exportRoutes(ctx))
 }

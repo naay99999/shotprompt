@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
+import { ConfirmDialog, ErrorNotice } from '@/components/ui-feedback'
+import { useNavigationGuard } from '@/components/navigation-guard'
+import { checkResponse } from '@/lib/ui-error'
+import { createSaveQueue, rangeError, mergeSubtitleEdits, subtitleRangeError } from '@/lib/editor-actions'
 import { api, API_BASE } from '@/lib/api'
+import { isAssessmentStale } from '@/lib/analysis-view'
+import { ScoreDetails } from './score-details'
 import { fmtTime } from '@/lib/format'
+import { cropPreviewRect } from '@/lib/video-crop'
 import type { Clip } from '@/components/clip-strip'
 
 type SubtitleRow = { id?: number; start: number; end: number; text: string }
@@ -15,7 +22,17 @@ function cropLabel(crop: number) {
 
 /** 9:16 crop-frame overlay, portaled into the player container so it renders
  * on top of the <video> element that lives in the main column (page.tsx). */
-function CropOverlay({ containerRef, offset }: { containerRef: RefObject<HTMLDivElement | null>; offset: number }) {
+function CropOverlay({
+  containerRef,
+  offset,
+  videoWidth,
+  videoHeight,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>
+  offset: number
+  videoWidth: number
+  videoHeight: number
+}) {
   const [dims, setDims] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
@@ -31,16 +48,15 @@ function CropOverlay({ containerRef, offset }: { containerRef: RefObject<HTMLDiv
   const el = containerRef.current
   if (!el || dims.w === 0 || dims.h === 0) return null
 
-  const overlayW = dims.h * (9 / 16)
-  const maxShift = Math.max(0, (dims.w - overlayW) / 2)
-  const centerX = dims.w / 2 + offset * maxShift
+  const cropRect = cropPreviewRect(dims.w, dims.h, videoWidth, videoHeight, offset)
+  if (!cropRect) return null
 
   return createPortal(
     <div
-      className="pointer-events-none absolute top-0 bottom-0 rounded-md border-2 border-accent transition-[left] duration-150 ease-out"
-      style={{ left: centerX - overlayW / 2, width: overlayW, boxShadow: '0 0 0 999px rgba(10,9,8,.55)' }}
+      className="pointer-events-none absolute z-10 rounded-md border-2 border-accent transition-[left,top,width,height] duration-150 ease-out"
+      style={{ ...cropRect, boxShadow: '0 0 0 999px rgba(10,9,8,.55)' }}
     >
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 rounded-[5px] bg-accent px-2 py-0.5 font-mono text-[10.5px] font-bold text-[#1a120b]">
+      <div className="absolute top-2 left-1/2 -translate-x-1/2 rounded-[5px] bg-accent px-2 py-0.5 font-mono text-[12px] font-bold text-[#1a120b]">
         9:16
       </div>
     </div>,
@@ -48,309 +64,134 @@ function CropOverlay({ containerRef, offset }: { containerRef: RefObject<HTMLDiv
   )
 }
 
-export function ClipEditor({
-  clip,
-  duration,
-  videoContainerRef,
-  onClose,
-  onUpdated,
-  onDeleted,
-}: {
-  clip: Clip
-  duration: number
-  videoContainerRef: RefObject<HTMLDivElement | null>
-  onClose: () => void
-  onUpdated: () => void
-  onDeleted: () => void
+export function ClipEditor({ clip, duration, videoContainerRef, videoWidth, videoHeight, onClose, onUpdated, onDeleted }: {
+  clip: Clip; duration: number; videoContainerRef: RefObject<HTMLDivElement | null>; videoWidth: number; videoHeight: number;
+  onClose: () => void; onUpdated: () => void; onDeleted: () => void;
 }) {
-  const [start, setStart] = useState(clip.start)
-  const [end, setEnd] = useState(clip.end)
-  const [crop, setCrop] = useState(clip.cropOffset)
-  const [subtitles, setSubtitles] = useState<SubtitleRow[]>([])
-  const [subsDirty, setSubsDirty] = useState(false)
-  const [subsSaving, setSubsSaving] = useState(false)
-  const [editingTimeIdx, setEditingTimeIdx] = useState<number | null>(null)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [start, setStart] = useState(clip.start);
+  const [end, setEnd] = useState(clip.end);
+  const [crop, setCrop] = useState(clip.cropOffset);
+  const [persisted, setPersisted] = useState({ start: clip.start, end: clip.end, cropOffset: clip.cropOffset });
+  const [subtitles, setSubtitles] = useState<SubtitleRow[]>([]);
+  const [subsDirty, setSubsDirty] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(0);
+  const [error, setError] = useState<unknown>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [notice, setNotice] = useState('');
+  const enqueue = useRef(createSaveQueue()).current;
+  const dirtyRef = useRef(false);
+  const submittedSubtitles = useRef<SubtitleRow[] | null>(null);
+  const persistedRef = useRef(persisted);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alive = useRef(true);
+  const { register, request } = useNavigationGuard();
+  dirtyRef.current = subsDirty;
+  const boundsDirty = start !== persisted.start || end !== persisted.end || crop !== persisted.cropOffset;
+  const invalidRange = rangeError(start, end, duration);
+  const invalidSubtitles = subtitleRangeError(subtitles, duration);
 
-  const firstTrimRun = useRef(true)
-  const firstCropRun = useRef(true)
-  const pendingTrimRef = useRef<{ start: number; end: number } | null>(null)
-  const pendingCropRef = useRef<number | null>(null)
-
-  const maxEnd = duration > 0 ? duration : Infinity
-
-  function refetchSubtitles() {
-    api.clips({ id: clip.id }).subtitles.get().then(r => {
-      if (r.data) setSubtitles(r.data)
-    })
+  async function loadSubtitles() {
+    setLoading(true); setLoadError(null);
+    try { const response = checkResponse(await api.clips({ id: clip.id }).subtitles.get()); if (alive.current && !dirtyRef.current && response.data) { submittedSubtitles.current = null; setSubtitles(response.data); } }
+    catch (error) { if (alive.current) setLoadError(error); }
+    finally { if (alive.current) setLoading(false); }
   }
+  useEffect(() => {
+    alive.current = true; void loadSubtitles();
+    return () => { alive.current = false; };
+    // The editor remounts for each clip.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clip.id]);
 
   useEffect(() => {
-    refetchSubtitles()
+    if (!boundsDirty || invalidRange || confirmDelete) return;
+    const draft = { start, end, cropOffset: crop };
+    const timer = setTimeout(() => {
+      setAutoSaving(count => count + 1); setError(null);
+      void enqueue(async () => {
+        checkResponse(await api.clips({ id: clip.id }).patch(draft));
+        if (alive.current) { persistedRef.current = draft; setPersisted(draft); onUpdated(); if (!dirtyRef.current) await loadSubtitles(); }
+      }).catch(error => { if (alive.current) setError(error); }).finally(() => { if (alive.current) setAutoSaving(count => count - 1); });
+    }, 400);
+    timerRef.current = timer;
+    return () => clearTimeout(timer);
+    // Only a new user edit schedules a write; failed writes wait for explicit retry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clip.id])
+  }, [start, end, crop, confirmDelete]);
 
-  // Debounced PATCH for trim — extending the range may add new transcript-derived
-  // subtitle rows server-side, so refetch subtitles once the patch lands.
+  async function saveAll(): Promise<boolean> {
+    if (invalidRange || invalidSubtitles || saving || loading || loadError) return false;
+    setSaving(true); setError(null); setNotice('');
+    const draft = { start, end, cropOffset: crop };
+    try {
+      await enqueue(async () => {
+        checkResponse(await api.clips({ id: clip.id }).patch(draft));
+        if (subsDirty) {
+          const latest = checkResponse(await api.clips({ id: clip.id }).subtitles.get());
+          const merged = mergeSubtitleEdits(latest.data ?? [], subtitles, submittedSubtitles.current);
+          setSubtitles(merged);
+          submittedSubtitles.current = merged;
+          checkResponse(await api.clips({ id: clip.id }).subtitles.put({ subtitles: merged.map(({ start, end, text }) => ({ start, end, text })) }));
+        }
+      });
+      persistedRef.current = draft; setPersisted(draft); setSubsDirty(false); dirtyRef.current = false; setNotice('บันทึกแล้ว'); onUpdated(); await loadSubtitles();
+      return true;
+    } catch (error) { setError(error); return false; } finally { setSaving(false); }
+  }
   useEffect(() => {
-    if (firstTrimRun.current) {
-      firstTrimRun.current = false
-      return
-    }
-    pendingTrimRef.current = { start, end }
-    const t = setTimeout(async () => {
-      pendingTrimRef.current = null
-      await api.clips({ id: clip.id }).patch({ start, end })
-      refetchSubtitles()
-      onUpdated()
-    }, 400)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [start, end])
-
-  // Debounced PATCH for crop offset — the overlay above updates immediately from
-  // local state; only the network call is debounced.
-  useEffect(() => {
-    if (firstCropRun.current) {
-      firstCropRun.current = false
-      return
-    }
-    pendingCropRef.current = crop
-    const t = setTimeout(async () => {
-      pendingCropRef.current = null
-      await api.clips({ id: clip.id }).patch({ cropOffset: crop })
-      onUpdated()
-    }, 250)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crop])
-
-  // Flush any still-pending debounced PATCH on unmount (e.g. the user edits trim/crop
-  // and immediately switches clips or closes the panel before the debounce fires) —
-  // otherwise clearTimeout above would silently cancel the write and drop the edit.
-  useEffect(() => {
-    return () => {
-      const trim = pendingTrimRef.current
-      if (trim) api.clips({ id: clip.id }).patch(trim).then(onUpdated)
-      const crop = pendingCropRef.current
-      if (crop !== null) api.clips({ id: clip.id }).patch({ cropOffset: crop }).then(onUpdated)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  function stepStart(e: React.MouseEvent, sign: 1 | -1) {
-    const delta = (e.shiftKey ? 0.1 : 1.0) * sign
-    setStart(s => Math.max(0, Math.min(s + delta, end - 2)))
+    register({ dirty: subsDirty || boundsDirty, save: saveAll, discard: async () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      await enqueue(async () => {});
+      dirtyRef.current = false; setSubsDirty(false);
+      const saved = persistedRef.current;
+      setStart(saved.start); setEnd(saved.end); setCrop(saved.cropOffset);
+      await loadSubtitles();
+    } });
+    return () => register(null);
+  });
+  function editSubtitle(index: number, patch: Partial<SubtitleRow>) {
+    dirtyRef.current = true; setSubsDirty(true); setNotice('');
+    setSubtitles(rows => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
   }
-  function stepEnd(e: React.MouseEvent, sign: 1 | -1) {
-    const delta = (e.shiftKey ? 0.1 : 1.0) * sign
-    setEnd(v => Math.max(start + 2, Math.min(v + delta, maxEnd)))
-  }
-
-  function editSubtitleText(i: number, text: string) {
-    setSubtitles(rows => rows.map((r, j) => (j === i ? { ...r, text } : r)))
-    setSubsDirty(true)
-  }
-  function editSubtitleTime(i: number, field: 'start' | 'end', value: number) {
-    setSubtitles(rows => rows.map((r, j) => (j === i ? { ...r, [field]: value } : r)))
-    setSubsDirty(true)
-  }
-  async function saveSubtitles() {
-    setSubsSaving(true)
-    await api.clips({ id: clip.id }).subtitles.put({
-      subtitles: subtitles.map(s => ({ start: s.start, end: s.end, text: s.text })),
-    })
-    setSubsSaving(false)
-    setSubsDirty(false)
-  }
-
-  async function deleteClip() {
-    if (!confirmingDelete) {
-      setConfirmingDelete(true)
-      return
-    }
-    setDeleting(true)
-    await api.clips({ id: clip.id }).delete()
-    setDeleting(false)
-    onDeleted()
-  }
-
-  return (
-    <div className="flex w-[360px] flex-none flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-      <CropOverlay containerRef={videoContainerRef} offset={crop} />
-
-      <div className="flex items-center justify-between border-b border-line px-[18px] py-3.5">
-        <div className="text-[14.5px] font-bold">
-          แก้ไขคลิป{' '}
-          <span className="font-mono text-[12px] font-normal text-dim">
-            {fmtTime(start)} – {fmtTime(end)}
-          </span>
+  return <section aria-label="แก้ไขคลิป" className="flex w-full min-w-0 flex-none flex-col rounded-2xl border border-line3 bg-surface lg:w-[360px]">
+    <CropOverlay containerRef={videoContainerRef} offset={crop} videoWidth={videoWidth} videoHeight={videoHeight} />
+    {clip.assessment && <div className="space-y-2 border-b border-line3 p-4 text-[12px]"><p className="text-muted">{isAssessmentStale(clip.assessment, clip.start, clip.end) ? 'คะแนนของช่วงแนะนำเดิม — ช่วงคลิปถูกแก้ไขแล้ว' : 'ผลประเมินตอนเพิ่มคลิป'}</p><ScoreDetails assessment={clip.assessment.assessment} />{clip.assessment.evaluatorMetadata && <p className="break-words text-muted">โมเดล {clip.assessment.evaluatorMetadata.snapshot.provider.model} · เกณฑ์ {clip.assessment.evaluatorMetadata.snapshot.rubricVersion}</p>}</div>}
+    <header className="flex items-center justify-between gap-2 border-b border-line3 p-4"><h2 className="font-semibold">แก้ไขคลิป</h2><button type="button" aria-label="ปิดการแก้ไขคลิป" onClick={() => request(onClose)} className="rounded-lg border border-line3 px-3">ปิด</button></header>
+    <div className="space-y-5 p-4">
+      <p role="status" className="text-[12px] text-muted">{saving || autoSaving > 0 ? 'กำลังบันทึก…' : subsDirty ? 'มีคำบรรยายที่ยังไม่บันทึก' : boundsDirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : notice || 'เวลาและการจัดเฟรมจะบันทึกอัตโนมัติ'}</p>
+      <ErrorNotice error={error} fallback="บันทึกไม่สำเร็จ การแก้ไขยังอยู่ในหน้านี้ กรุณาลองบันทึกอีกครั้ง" />
+      <fieldset disabled={saving} className="space-y-5">
+        <div><h3 className="mb-2 font-semibold">ตัดช่วงเวลา</h3><div className="grid grid-cols-2 gap-3">
+          <label className="text-[12px] text-muted">เริ่ม (วินาที)<input type="number" min={0} max={duration} step={0.1} value={start} onChange={event => setStart(event.currentTarget.valueAsNumber)} className="mt-1 w-full min-w-0 rounded-lg border border-line3 bg-bg px-2 py-2 text-[14px] text-ink" /></label>
+          <label className="text-[12px] text-muted">จบ (วินาที)<input type="number" min={0} max={duration} step={0.1} value={end} onChange={event => setEnd(event.currentTarget.valueAsNumber)} className="mt-1 w-full min-w-0 rounded-lg border border-line3 bg-bg px-2 py-2 text-[14px] text-ink" /></label>
+        </div>{invalidRange ? <p role="alert" className="mt-2 text-[12px] text-err">{invalidRange}</p> : <p className="mt-2 text-[12px] text-muted">{fmtTime(start)} – {fmtTime(end)} · ความยาว {(end - start).toFixed(1)} วินาที</p>}</div>
+        <label className="block text-[14px]">จัดเฟรมแนวตั้ง (9:16)<span className="ml-2 text-[12px] text-accent">{cropLabel(crop)}</span>
+          <input type="range" min={-100} max={100} value={Math.round(crop * 100)} onChange={event => setCrop(Number(event.target.value) / 100)} className="mt-2 w-full" />
+          <span className="flex justify-between text-[12px] text-muted"><span>ซ้าย</span><span>กลาง</span><span>ขวา</span></span>
+        </label>
+        <p className="text-[12px] text-muted">กรอบสีส้มใช้เมื่อส่งออกแนวตั้งเท่านั้น</p>
+        <div className="space-y-3"><h3 className="font-semibold">คำบรรยาย ({subtitles.length})</h3>
+          <ErrorNotice error={loadError} onRetry={loadSubtitles} />{invalidSubtitles && <p role="alert" className="text-err">{invalidSubtitles}</p>}{loading && <p role="status">กำลังโหลดคำบรรยาย…</p>}
+          {!loading && !loadError && subtitles.length === 0 && <p className="text-[14px] text-muted">ไม่มีคำบรรยายในช่วงนี้ ลองขยายช่วงเวลาหรือถอดเสียงใหม่</p>}
+          {subtitles.map((row, index) => <div key={row.id ?? index} className="space-y-2 rounded-lg border border-line3 bg-bg p-3">
+            <label className="block text-[12px] text-muted">คำบรรยายบรรทัดที่ {index + 1}<textarea rows={2} value={row.text} disabled={loading || !!loadError} onChange={event => editSubtitle(index, { text: event.target.value })} className="mt-1 w-full resize-y rounded border border-line3 bg-surface p-2 text-[14px] text-ink" /></label>
+            <details><summary className="cursor-pointer text-[12px] text-muted">เวลาแสดง {fmtTime(row.start)} – {fmtTime(row.end)}</summary><div className="grid grid-cols-2 gap-2">
+              <label className="text-[12px]">เริ่ม (วินาที)<input type="number" disabled={loading || !!loadError} step={0.1} value={row.start} onChange={event => editSubtitle(index, { start: event.target.valueAsNumber })} className="w-full min-w-0 rounded border border-line3 p-2" /></label>
+              <label className="text-[12px]">จบ (วินาที)<input type="number" disabled={loading || !!loadError} step={0.1} value={row.end} onChange={event => editSubtitle(index, { end: event.target.valueAsNumber })} className="w-full min-w-0 rounded border border-line3 p-2" /></label>
+            </div></details>
+          </div>)}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-[13px] text-dim transition-colors hover:bg-line2 hover:text-ink"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-[22px] overflow-y-auto p-[18px]">
-        {/* Trim */}
-        <div className="flex flex-col gap-2.5">
-          <div className="text-[11.5px] font-semibold tracking-[.4px] text-faint">ช่วงเวลา (TRIM)</div>
-          <div className="flex gap-2.5">
-            <div className="flex-1 rounded-[10px] border border-line2 bg-surface2 px-3 py-2.5">
-              <div className="mb-[3px] text-[10.5px] text-faint">เริ่ม</div>
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={e => stepStart(e, -1)}
-                  className="px-1 text-[15px] text-dim transition-colors hover:text-accent"
-                >
-                  ‹
-                </button>
-                <span className="font-mono text-[13.5px]">{fmtTime(start)}</span>
-                <button
-                  type="button"
-                  onClick={e => stepStart(e, 1)}
-                  className="px-1 text-[15px] text-dim transition-colors hover:text-accent"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 rounded-[10px] border border-line2 bg-surface2 px-3 py-2.5">
-              <div className="mb-[3px] text-[10.5px] text-faint">จบ</div>
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={e => stepEnd(e, -1)}
-                  className="px-1 text-[15px] text-dim transition-colors hover:text-accent"
-                >
-                  ‹
-                </button>
-                <span className="font-mono text-[13.5px]">{fmtTime(end)}</span>
-                <button
-                  type="button"
-                  onClick={e => stepEnd(e, 1)}
-                  className="px-1 text-[15px] text-dim transition-colors hover:text-accent"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="text-[12px] text-dim">
-            ความยาว <span className="font-mono text-ink">{(end - start).toFixed(1)} วินาที</span> · ขยายช่วงแล้ว subtitle
-            เดิมที่แก้ไว้ไม่หาย
-          </div>
-        </div>
-
-        {/* Crop */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between">
-            <div className="text-[11.5px] font-semibold tracking-[.4px] text-faint">ตำแหน่งครอป 9:16</div>
-            <div className="font-mono text-[11.5px] text-accent">{cropLabel(crop)}</div>
-          </div>
-          <input
-            type="range"
-            min={-100}
-            max={100}
-            value={Math.round(crop * 100)}
-            onChange={e => setCrop(Number(e.target.value) / 100)}
-            className="w-full cursor-pointer"
-          />
-          <div className="flex justify-between text-[11px] text-faint">
-            <span>ซ้าย</span>
-            <span>กลาง</span>
-            <span>ขวา</span>
-          </div>
-        </div>
-
-        {/* Subtitles */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between">
-            <div className="text-[11.5px] font-semibold tracking-[.4px] text-faint">SUBTITLE ({subtitles.length})</div>
-            <div className="flex items-center gap-2.5">
-              {subsDirty && (
-                <button
-                  type="button"
-                  onClick={saveSubtitles}
-                  disabled={subsSaving}
-                  className="rounded-md bg-accent px-2.5 py-1 text-[11.5px] font-semibold text-[#1a120b] transition-[filter] hover:brightness-110 disabled:opacity-50"
-                >
-                  {subsSaving ? 'กำลังบันทึก…' : 'บันทึก'}
-                </button>
-              )}
-              <a
-                href={`${API_BASE}/clips/${clip.id}/srt`}
-                className="text-[12px] text-dim hover:text-accent hover:underline"
-              >
-                ↓ ดาวน์โหลด .srt
-              </a>
-            </div>
-          </div>
-          {subtitles.length === 0 && <div className="text-[12px] text-faint">ยังไม่มี subtitle ในช่วงนี้</div>}
-          {subtitles.map((s, i) => (
-            <div
-              key={s.id ?? i}
-              className="rounded-[10px] border border-line bg-surface2 px-3 py-2.5 transition-colors hover:border-line3"
-            >
-              {editingTimeIdx === i ? (
-                <div className="mb-1 flex items-center gap-1.5 font-mono text-[11px]">
-                  <input
-                    type="number"
-                    step={0.1}
-                    value={s.start}
-                    onChange={e => editSubtitleTime(i, 'start', Number(e.target.value))}
-                    className="w-[64px] rounded border border-line2 bg-transparent px-1 py-0.5 text-ink"
-                  />
-                  <span className="text-faint">→</span>
-                  <input
-                    type="number"
-                    step={0.1}
-                    value={s.end}
-                    onChange={e => editSubtitleTime(i, 'end', Number(e.target.value))}
-                    className="w-[64px] rounded border border-line2 bg-transparent px-1 py-0.5 text-ink"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setEditingTimeIdx(null)}
-                    className="px-1 text-ok transition-colors hover:brightness-110"
-                  >
-                    ✓
-                  </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setEditingTimeIdx(i)}
-                  className="mb-1 block font-mono text-[10.5px] text-faint hover:text-accent"
-                >
-                  {fmtTime(s.start)} → {fmtTime(s.end)}
-                </button>
-              )}
-              <input
-                value={s.text}
-                onChange={e => editSubtitleText(i, e.target.value)}
-                className="w-full border-none bg-transparent p-0 text-[13.5px] text-ink"
-              />
-            </div>
-          ))}
-        </div>
-
-        <button
-          type="button"
-          onClick={deleteClip}
-          disabled={deleting}
-          onBlur={() => setConfirmingDelete(false)}
-          className="rounded-[9px] border border-err/30 bg-transparent px-2.5 py-2.5 text-[12.5px] text-err transition-colors hover:bg-err/10 disabled:opacity-50"
-        >
-          {deleting ? 'กำลังลบ…' : confirmingDelete ? 'ยืนยันลบคลิปนี้?' : 'ลบคลิปนี้'}
-        </button>
-      </div>
+      </fieldset>
+      <button type="button" disabled={saving || loading || !!loadError || !!invalidRange || !!invalidSubtitles || (!subsDirty && !boundsDirty)} onClick={() => void saveAll()} className="w-full rounded-lg bg-accent px-4 py-2 font-semibold text-bg">{saving ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}</button>
+      <a href={`${API_BASE}/clips/${clip.id}/srt`} className="inline-flex items-center text-[14px] text-accent">ดาวน์โหลดคำบรรยาย (.srt)</a>
+      {subsDirty && <p className="text-[12px] text-muted">บันทึกก่อนดาวน์โหลด เพื่อให้ไฟล์มีข้อความที่แก้ล่าสุด</p>}
+      <button type="button" onClick={() => setConfirmDelete(true)} disabled={saving || autoSaving > 0} className="block w-full rounded-lg border border-err/40 px-4 py-2 text-err">ลบคลิปนี้</button>
+      {confirmDelete && <ConfirmDialog title="ลบคลิปนี้?" onClose={() => setConfirmDelete(false)} onConfirm={async () => {
+        await enqueue(async () => { checkResponse(await api.clips({ id: clip.id }).delete()); }); register(null); onDeleted();
+      }}><p>คลิปช่วง {fmtTime(clip.start)} – {fmtTime(clip.end)} รวมคำบรรยายและไฟล์ส่งออกของคลิปนี้จะถูกลบถาวร วิดีโอต้นฉบับในคลังจะยังอยู่</p></ConfirmDialog>}
     </div>
-  )
+  </section>;
 }

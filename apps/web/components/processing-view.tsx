@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { ErrorNotice } from '@/components/ui-feedback'
 import { fmtTime } from '@/lib/format'
 import { useEvents } from '@/lib/use-events'
 import { PIPELINE_STEP_META } from '@/lib/pipeline-steps'
@@ -63,8 +64,8 @@ export function ProcessingView({
       <div className="mx-auto flex max-w-[620px] flex-col gap-[18px] px-6 pt-11 pb-20">
         <div className="mb-1.5 text-center">
           <div className="text-[19px] font-bold">กำลังประมวลผลวิดีโอ</div>
-          <div className="mt-1 text-[13px] text-muted">
-            ปิดหน้านี้ได้เลย งานรันต่อเบื้องหลัง — กลับมาดูเมื่อไหร่ก็ได้
+          <div className="mt-1 text-[14px] text-muted">
+            ปิดแท็บนี้ได้ แต่ต้องเปิดโปรแกรมประมวลผล ShotPrompt ในเครื่องไว้จนงานเสร็จ
           </div>
         </div>
 
@@ -110,7 +111,8 @@ export function ProcessingView({
                     </div>
                   </div>
                   <div className="mt-px text-[12px] text-faint">
-                    {isFailed && row?.error ? row.error : step.desc}
+                    {step.desc}
+                    {isFailed && <ErrorNotice error={row?.error || "Processing failed"} fallback="ขั้นตอนนี้ไม่สำเร็จ กรุณาลองเริ่มงานใหม่" />}
                   </div>
                   {isRunning && isTranscribe && (
                     <div className="mt-2.5">
@@ -120,10 +122,10 @@ export function ProcessingView({
                           style={{ width: `${Math.round((progress?.pct ?? 0) * 100)}%` }}
                         />
                       </div>
-                      <div className="mt-[7px] font-mono text-[11.5px] text-dim">
-                        {Math.round((progress?.pct ?? 0) * 100)}% · ใช้ไป {fmtTime(elapsedSeconds)}
+                      <div className="mt-[7px] font-mono text-[12px] text-dim">
+                        {progress ? `${Math.round(progress.pct * 100)}%` : 'กำลังเริ่มถอดเสียง…'} · ใช้ไป {fmtTime(elapsedSeconds)}
                         {remainingSeconds != null ? ` · เหลือประมาณ ${fmtTime(remainingSeconds)}` : ''}
-                        {progress?.time ? ` · segment ล่าสุด ${fmtTime(progress.time)}` : ''}
+                        {progress?.time ? ` · ถอดเสียงถึง ${fmtTime(progress.time)}` : ''}
                         {duration ? ` / ${fmtTime(duration)}` : ''}
                       </div>
                     </div>
@@ -136,11 +138,11 @@ export function ProcessingView({
 
         {feed.length > 0 && (
           <div className="flex flex-col gap-2 px-1.5">
-            <div className="text-[11.5px] font-semibold tracking-[.4px] text-faint">ถอดเสียงล่าสุด</div>
+            <div className="text-[12px] font-semibold tracking-[.4px] text-faint">ถอดเสียงล่าสุด</div>
             {feed.map((f, i) => (
               <div key={i} className="flex animate-[fadeUp_.35s_ease] gap-3">
-                <span className="flex-none pt-0.5 font-mono text-[11.5px] text-faint">{fmtTime(f.time)}</span>
-                <span className="text-[13.5px] text-muted">{f.text}</span>
+                <span className="flex-none pt-0.5 font-mono text-[12px] text-faint">{fmtTime(f.time)}</span>
+                <span className="text-[14px] text-muted">{f.text}</span>
               </div>
             ))}
           </div>

@@ -159,6 +159,6 @@ Real-model acceptance requires the user's configured endpoint/model and user-app
 - [x] Written spec reviewed for scope, budgets, compatibility and failure paths.
 - [x] User reviews and approves this written spec (chat: “ok”).
 - [x] Write implementation plan; preserve the previously selected Native execution method.
-- [ ] User reviews and approves the written implementation plan.
-- [ ] Implement and verify project B.
+- [x] User reviews and approves the written implementation plan (Native execution).
+- [x] Implement and verify project B (225 fixture/unit/integration tests, typecheck, production build and isolated browser checks; real-model quality unverified).
 - [ ] Design project C separately.

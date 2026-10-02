@@ -2,21 +2,27 @@ import { Elysia, status, t } from 'elysia'
 import { asc, desc, eq } from 'drizzle-orm'
 import { rmSync } from 'node:fs'
 import { candidates, clipSubtitles, clips, exportsTable, type DB } from '@shotprompt/db'
-import { buildSRT } from '@shotprompt/core'
+import { buildSRT, type ClipAssessmentSnapshot } from '@shotprompt/core'
 import type { Ctx } from '../context'
+import { listCandidates } from '../analysis-store'
+import { analysisErrorResponse } from './analysis'
 import { createClip, replaceClipSubtitles, updateClip } from '../clip-service'
 
+const clipView = (row: typeof clips.$inferSelect) => ({ ...row, assessment: row.assessmentJson ? JSON.parse(row.assessmentJson) as ClipAssessmentSnapshot : null })
+
 export const clipRoutes = ({ db }: Ctx) => new Elysia()
-  .get('/videos/:id/candidates', ({ params }) =>
-    db.select().from(candidates).where(eq(candidates.videoId, params.id)).orderBy(desc(candidates.score)).all())
+  .get('/videos/:id/candidates', ({ params, query }) => {
+    try { return listCandidates(db, params.id, query.runId, query.includeSuppressed === 'true') }
+    catch (error) { return analysisErrorResponse(error) }
+  }, { query: t.Object({ runId: t.Optional(t.String()), includeSuppressed: t.Optional(t.String()) }) })
   .get('/videos/:id/clips', ({ params }) =>
-    db.select().from(clips).where(eq(clips.videoId, params.id)).orderBy(asc(clips.createdAt)).all())
+    db.select().from(clips).where(eq(clips.videoId, params.id)).orderBy(asc(clips.createdAt)).all().map(clipView))
   .post('/videos/:id/clips', ({ params, body }) => {
-    try { return createClip(db, params.id, body) }
+    try { return clipView(createClip(db, params.id, body)) }
     catch (e) { return status(400, { message: String(e) }) }
   }, { body: t.Object({ candidateId: t.Optional(t.String()), start: t.Optional(t.Number()), end: t.Optional(t.Number()) }) })
   .patch('/clips/:id', ({ params, body }) => {
-    try { return updateClip(db, params.id, body) }
+    try { return clipView(updateClip(db, params.id, body)) }
     catch (e) { return status(400, { message: String(e) }) }
   }, { body: t.Object({ start: t.Optional(t.Number()), end: t.Optional(t.Number()), cropOffset: t.Optional(t.Number()) }) })
   .delete('/clips/:id', ({ params }) => {

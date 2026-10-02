@@ -1,8 +1,8 @@
 # ShotPrompt
 
-A local-first tool for turning long Thai live-commerce recordings into short,
-subtitled, 9:16-ready clips — transcription, scene/hook detection, trimming, and
-export all run on your own machine. Nothing is uploaded anywhere.
+A local-first tool for turning long recordings into short,
+subtitled, 9:16-ready clips — transcription, highlight analysis, trimming, and
+export run on your own machine. AI highlight analysis uses the model endpoint you configure; external inference requires explicit opt-in.
 
 ## Prerequisites
 
@@ -104,6 +104,68 @@ is reported as unverified.)
 You can revisit these checks any time from **Settings** (`/settings`), which also
 lets you switch transcription models and manage disk usage (deleting videos/exports
 lives there — the video library itself has no delete button, by design).
+
+## AI highlight analysis
+
+In **Settings → การเชื่อมต่อ AI สำหรับคัดช่วงคลิป**, create up to 20 named profiles.
+Built-in choices are **OpenRouter**, **Gemini**, **Ollama**, **Local OpenAI-compatible**,
+and **Custom API**. OpenRouter and Gemini use their OpenAI-compatible endpoints; Ollama
+uses its native chat endpoint. Custom endpoints can use Ollama or OpenAI-compatible
+protocols. ShotPrompt does not install or download an LLM.
+
+For OpenRouter, enter an API key, save the profile, then search its model catalog or
+type a model ID manually. Catalog entries may include context limits, prices and
+structured-output support. Unknown metadata stays labeled unknown; a stale catalog
+remains visible after a refresh failure. Other providers expose models when their
+endpoint implements a compatible `/models` or Ollama `/api/tags` catalog.
+
+For cloud inference, explicitly allow sending transcript content before testing or
+analyzing. Choose JSON schema output when the model supports it, or JSON mode otherwise.
+For OpenRouter schema output, routing requires an endpoint that supports the requested
+parameters. Connection tests send only a tiny synthetic scoring-shaped request and may
+incur a small provider charge; they do not measure model quality.
+
+API keys are entered through the local Settings UI, encrypted with AES-256-GCM, and
+stored separately from profile metadata in SQLite. They are not shown again or saved
+in browser storage, job history, or logs. Back up `data/secrets/ai-vault.key` together
+with the database: stored keys cannot be decrypted without that 32-byte master key.
+On Unix, ShotPrompt sets the secret directory to mode 0700 and key file to 0600;
+on Windows, access depends on the account's filesystem ACLs. If the master key is lost,
+restore it from backup or remove the affected profiles before creating new credentials.
+Profiles imported from the older single-provider setting need a successful connection
+test and explicit activation before automatic analysis resumes.
+
+Open **ตั้งค่าการคัดช่วงเด่น** on upload, or **ตั้งค่าการคัดช่วง / ประเมินใหม่**
+in the workspace. Specify duration (5–180 seconds; default 15–60), an optional freeform
+instruction (up to 500 characters), and maximum primary clips (1–30; default 10).
+No predefined category is required. AI reads subtitle context, proposes ranges and
+returns titles, summaries, tags, reasons and evidence. The server validates subtitle
+IDs and computes the score: opening 20%, standalone clarity 25%, substance 25%,
+closure 20%, instruction relevance 10%. Each dimension is 0–5; total is 0–100.
+Scores rank content within a run; they do not predict virality or prove factual accuracy.
+Language coverage and selection quality depend on the configured model.
+
+The media pipeline finishes before a separate AI job starts. Without a configured
+model, videos remain ready for manual editing and later analysis. Scene-only suggestions
+have no content score. AI failures never silently fall back to keyword scores.
+**ประเมินช่วงใหม่** reuses transcripts and scene times without rerunning Whisper;
+failed/canceled runs leave previous results available. History preserves the model,
+prompt/rubric version, configuration, request count and reported token usage (unknown
+usage is shown as unavailable). Accepted clips preserve their original assessment
+and display a notice after boundary edits. Feedback is local and does not train a model.
+
+Request timeout defaults to 120 seconds (10–600), total run timeout to 1800 seconds
+(60–7200). Transcript records are split into bounded context chunks; limits include
+40 core chunks, 120 unique proposals and 160 model requests including repairs.
+Oversized input, invalid evidence/output or expired deadlines fail the whole run
+without publishing partial results. The server permits one repair per invalid response.
+
+Old rules histories, scores and clips remain readable with their original values.
+Legacy settings can be explicitly converted to AI instructions; category weights are
+not reused. SQLite migrations preserve old data. History and thumbnails remain until
+the video is deleted. Image/audio understanding (project C) is future work; current AI
+content scoring uses subtitles. Real-model ranking accuracy still needs evaluation
+with representative user recordings.
 
 ## Where your data lives
 

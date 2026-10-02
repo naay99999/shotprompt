@@ -237,6 +237,8 @@ describe('system routes', () => {
     const names = body.models.map((m: { name: string }) => m.name)
     expect(names).toContain('large-v3')
     expect(names).toContain('medium')
+    expect(body.languages).toHaveLength(100)
+    expect(body.languages.find((language: { code: string }) => language.code === 'yue')?.name).toBe('Cantonese')
   })
   it('doctor.models includes the configured model even if it is not one of the two known picks', async () => {
     const a = app()

@@ -8,7 +8,7 @@ export const jobRoutes = (ctx: Ctx) => new Elysia()
     const job = ctx.db.select().from(jobs).where(eq(jobs.id, params.id)).get()
     if (!job) return status(404, { message: 'not found' })
 
-    const canceled = ctx.pipelineQueue.cancel(params.id) || ctx.exportQueue.cancel(params.id)
+    const canceled = ctx.pipelineQueue.cancel(params.id) || ctx.exportQueue.cancel(params.id) || ctx.analysisQueue.cancel(params.id)
     if (!canceled) return status(409, { message: 'not cancelable' })
     return { ok: true }
   })

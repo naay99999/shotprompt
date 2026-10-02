@@ -12,6 +12,8 @@ it('whisper args + line parse', () => {
 it('requests and parses Whisper progress from stderr', () => {
   expect(buildWhisperArgs({ model: 'm.bin', audio: 'a.wav', language: 'th' }))
     .toEqual(['-m', 'm.bin', '-f', 'a.wav', '-l', 'th', '-pp'])
+  expect(buildWhisperArgs({ model: 'm.bin', audio: 'a.wav', language: 'ja' }))
+    .toEqual(['-m', 'm.bin', '-f', 'a.wav', '-l', 'ja', '-pp'])
   expect(parseWhisperProgress('whisper_print_progress_callback: progress =  45%')).toBe(0.45)
   expect(parseWhisperProgress('whisper_init: loading model')).toBeNull()
 })

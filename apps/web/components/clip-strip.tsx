@@ -1,5 +1,6 @@
 'use client'
 
+import type { ClipAssessmentSnapshot } from '@shotprompt/core'
 import { API_BASE } from '@/lib/api'
 import { fmtTime } from '@/lib/format'
 
@@ -10,6 +11,7 @@ export type Clip = {
   start: number
   end: number
   score: number | null
+  assessment?: ClipAssessmentSnapshot | null
   cropOffset: number
   thumbnailPath: string | null
   createdAt: number
@@ -44,69 +46,22 @@ export function ClipStrip({
   onToggleExport: (id: string) => void
 }) {
   return (
-    <div className="flex flex-none flex-col gap-2.5">
-      <div className="flex items-center gap-2">
-        <div className="text-[14px] font-bold">คลิปของฉัน</div>
-        <div className="rounded-full bg-line2 px-2.5 py-0.5 text-[11.5px] text-muted">{clips.length}</div>
-        <div className="flex-1" />
-        <div className="text-[12px] text-faint">ติ๊กเลือกคลิปที่จะ export</div>
-      </div>
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        {clips.length === 0 && (
-          <div className="rounded-xl border border-dashed border-line3 px-4 py-6 text-[12.5px] text-faint">
-            ยังไม่มีคลิป — กด ＋ ที่ candidate หรือลากบน timeline เพื่อสร้างคลิปแรก
-          </div>
-        )}
-        {clips.map(clip => {
-          const selected = clip.id === selectedClipId
-          const checked = !!exportSel[clip.id]
-          const thumbSrc = clip.candidateId ? `${API_BASE}/videos/${videoId}/thumb/${clip.candidateId}.jpg` : null
-          return (
-            <div
-              key={clip.id}
-              onClick={() => onSelect(clip.id)}
-              className={`w-[198px] flex-none cursor-pointer overflow-hidden rounded-xl border-[1.5px] bg-surface transition-[border-color,transform] hover:-translate-y-0.5 ${
-                selected ? 'border-accent' : 'border-line'
-              }`}
-            >
-              <div className="relative h-[86px]" style={{ background: gradientFor(clip.id) }}>
-                {thumbSrc && (
-                  <img
-                    src={thumbSrc}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onError={e => {
-                      ;(e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                  />
-                )}
-                <div
-                  onClick={e => {
-                    e.stopPropagation()
-                    onToggleExport(clip.id)
-                  }}
-                  className={`absolute top-2 left-2 flex h-[18px] w-[18px] items-center justify-center rounded-[5px] border-[1.5px] text-[11px] font-bold text-[#1a120b] transition-colors ${
-                    checked ? 'border-accent bg-accent' : 'border-white/40 bg-black/30'
-                  }`}
-                >
-                  {checked ? '✓' : ''}
-                </div>
-                <div className="absolute right-1.5 bottom-1.5 rounded-[5px] bg-black/65 px-1.5 py-px font-mono text-[10.5px] text-[#c9c4bb]">
-                  {fmtTime(clip.end - clip.start)}
-                </div>
-              </div>
-              <div className="px-3 py-2.5">
-                <div className="font-mono text-[12.5px]">
-                  {fmtTime(clip.start)} – {fmtTime(clip.end)}
-                </div>
-                <div className="mt-0.5 text-[11.5px] text-dim">
-                  {clip.score != null ? `คะแนน ${Math.round(clip.score)}` : 'คลิปที่สร้างเอง'}
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    <section aria-label="คลิปของฉัน" className="space-y-3">
+      <h2 className="font-semibold">คลิปของฉัน ({clips.length})</h2>
+      <p className="text-[12px] text-muted">เปิดคลิปเพื่อแก้ไข และเลือกช่องทำเครื่องหมายสำหรับคลิปที่ต้องการส่งออก</p>
+      {clips.length === 0 && <p className="rounded-xl border border-dashed border-line3 p-5 text-[14px] text-muted">ยังไม่มีคลิป เลือก “เพิ่มเป็นคลิป” จากช่วงแนะนำ หรือกำหนดเวลาเองในแถบเวลา</p>}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{clips.map(clip => (
+        <article key={clip.id} className={`min-w-0 rounded-xl border bg-surface p-3 ${selectedClipId === clip.id ? 'border-accent' : 'border-line3'}`}>
+          <button type="button" aria-pressed={selectedClipId === clip.id} onClick={() => onSelect(clip.id)} className="w-full rounded-lg text-left">
+            <span className="relative mb-2 block h-24 overflow-hidden rounded-lg" style={{ background: gradientFor(clip.id) }}>
+              {clip.candidateId && <img src={`${API_BASE}/videos/${videoId}/thumb/${clip.candidateId}.jpg`} alt="" className="h-full w-full object-cover" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} />}
+            </span>
+            <span className="block text-[14px]">แก้ไขคลิป {fmtTime(clip.start)} – {fmtTime(clip.end)}</span>
+            <span className="text-[12px] text-muted">ความยาว {Math.round(clip.end - clip.start)} วินาที</span>
+          </button>
+          <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-3 text-[14px]"><input type="checkbox" checked={!!exportSel[clip.id]} onChange={() => onToggleExport(clip.id)} />เลือกส่งออกคลิปนี้</label>
+        </article>
+      ))}</div>
+    </section>
   )
 }

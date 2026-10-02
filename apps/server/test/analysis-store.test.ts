@@ -1,0 +1,25 @@
+import { expect, it } from 'bun:test';
+import { eq } from 'drizzle-orm';
+import { createDb, videos, segments, analysisRuns, candidates, candidateFeedback } from '@shotprompt/db';
+import { analyzeHighlights, parseAnalysisOptions } from '@shotprompt/core';
+import { createAnalysisRun, loadAnalysisInput, publishAnalysisRun, sourceRevision } from '../src/analysis-store';
+it('publishes complete runs while retaining previous candidates and feedback and rejecting stale source', () => {
+  const db = createDb(':memory:');
+  db.insert(videos).values({ id: 'v', filename: 'x', path: '/x', language: 'th', duration: 30, status: 'ready', createdAt: 1 }).run();
+  db.insert(segments).values({ videoId: 'v', start: 0, end: 30, text: 'ข้อผิดพลาด วิธีทำ ยกตัวอย่าง สรุปคือ' }).run();
+  const options = parseAnalysisOptions(undefined), input = loadAnalysisInput(db, 'v', options);
+  const prepare = () => analyzeHighlights(input).map(r => ({ ...r, id: crypto.randomUUID(), thumbnailPath: '/thumb.jpg' }));
+  const a = createAnalysisRun(db, 'v', 'j1', options); db.update(analysisRuns).set({ status: 'running' }).where(eq(analysisRuns.id, a.id)).run();
+  const aRows = prepare(); publishAnalysisRun(db, a.id, input, aRows);
+  db.insert(candidateFeedback).values({ candidateId: aRows[0].id, videoId: 'v', runId: a.id, verdict: 'good', updatedAt: 1 }).run();
+  const b = createAnalysisRun(db, 'v', 'j2', options); db.update(analysisRuns).set({ status: 'running' }).where(eq(analysisRuns.id, b.id)).run(); publishAnalysisRun(db, b.id, input, prepare());
+  expect(db.select().from(videos).get()?.activeAnalysisRunId).toBe(b.id);
+  expect(db.select().from(candidates).where(eq(candidates.runId, a.id)).all()).toHaveLength(aRows.length);
+  expect(db.select().from(candidateFeedback).get()?.verdict).toBe('good');
+  const c = createAnalysisRun(db, 'v', 'j3', options); db.update(analysisRuns).set({ status: 'running' }).where(eq(analysisRuns.id, c.id)).run();
+  db.update(segments).set({ text: 'changed' }).run();
+  expect(() => publishAnalysisRun(db, c.id, input, prepare())).toThrow('source changed');
+  expect(db.select().from(videos).get()?.activeAnalysisRunId).toBe(b.id);
+  expect(sourceRevision(input)).toBe(sourceRevision({ ...input, segments: [...input.segments].reverse(), options: { ...options, query: 'new' } }));
+  db.raw.close();
+});

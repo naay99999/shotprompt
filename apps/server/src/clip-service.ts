@@ -1,5 +1,5 @@
 import { and, eq, gt, lt } from 'drizzle-orm'
-import { clipSubtitles, clips, candidates, segments, videos, type DB } from '@shotprompt/db'
+import { analysisRuns, candidateFeedback, clipSubtitles, clips, candidates, segments, videos, type DB } from '@shotprompt/db'
 
 function getVideoDuration(db: DB, videoId: string): number {
   const video = db.select().from(videos).where(eq(videos.id, videoId)).get()
@@ -27,10 +27,17 @@ function copySubtitles(db: DB, clipId: string, videoId: string, from: number, to
 export function createClip(db: DB, videoId: string, opts: { candidateId?: string; start?: number; end?: number }) {
   let start: number, end: number, score: number | null = null, candidateId: string | null = null
   let thumbnailPath: string | null = null
+  let assessmentJson: string | null = null
   if (opts.candidateId) {
     const c = db.select().from(candidates).where(eq(candidates.id, opts.candidateId)).get()
     if (!c) throw new Error('candidate not found')
     if (c.videoId !== videoId) throw new Error('candidate does not belong to video')
+    if (c.runId && c.assessmentJson) {
+      const run = db.select().from(analysisRuns).where(eq(analysisRuns.id, c.runId)).get()
+      if (!run || run.status !== 'done') throw new Error('analysis run unavailable')
+      const feedback = db.select().from(candidateFeedback).where(eq(candidateFeedback.candidateId, c.id)).get()
+      assessmentJson = JSON.stringify({ assessment: JSON.parse(c.assessmentJson), options: JSON.parse(run.optionsJson), runId: run.id, sourceRevision: run.sourceRevision, evaluatedStart: c.start, evaluatedEnd: c.end, feedback: feedback?.verdict ?? null, ...(run.evaluatorMetadataJson ? { evaluatorMetadata: JSON.parse(run.evaluatorMetadataJson) } : {}) })
+    }
     start = c.start; end = c.end; score = c.score; candidateId = c.id; thumbnailPath = c.thumbnailPath
   } else {
     if (opts.start == null || opts.end == null) throw new Error('invalid range')
@@ -38,7 +45,7 @@ export function createClip(db: DB, videoId: string, opts: { candidateId?: string
   }
   assertRange(start, end, getVideoDuration(db, videoId))
   const id = crypto.randomUUID()
-  db.insert(clips).values({ id, videoId, candidateId, start, end, score, cropOffset: 0, thumbnailPath, createdAt: Date.now() }).run()
+  db.insert(clips).values({ id, videoId, candidateId, start, end, score, assessmentJson, cropOffset: 0, thumbnailPath, createdAt: Date.now() }).run()
   copySubtitles(db, id, videoId, start, end)
   return db.select().from(clips).where(eq(clips.id, id)).get()!
 }

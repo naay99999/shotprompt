@@ -1,13 +1,14 @@
 import { existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { and, eq, isNull } from 'drizzle-orm'
-import { candidates, type DB } from '@shotprompt/db'
+import { candidates, videos, type DB } from '@shotprompt/db'
 import { buildThumbnailArgs } from '@shotprompt/core'
 import { videoDir } from '../env'
 import type { JobCtx } from '../queue'
 import { runCmd, renameTmp } from './spawn'
 
 export function satisfied(db: DB, videoId: string): boolean {
+  if (db.select().from(videos).where(eq(videos.id, videoId)).get()?.activeAnalysisRunId) return true
   return db.select().from(candidates).where(and(eq(candidates.videoId, videoId), isNull(candidates.thumbnailPath))).all().length === 0
 }
 export async function run(db: DB, videoId: string, ctx: JobCtx) {

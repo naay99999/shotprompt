@@ -22,9 +22,7 @@ body {
   background: transparent;
 }
 
-input:focus {
-  outline: none;
-}
+
 input[type='range'] {
   accent-color: #e8823f;
 }
@@ -81,3 +79,25 @@ input[type='range'] {
     background-position: 24px 0;
   }
 }
+
+
+body { font-size: 14px; line-height: 1.6; }
+button, input, select, textarea { font: inherit; }
+button, select, summary, input:not([type='checkbox']):not([type='radio']):not([type='file']) { min-height: 44px; }
+button { min-width: 44px; cursor: pointer; }
+button:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: .55; }
+input[type='checkbox'], input[type='radio'] { width: 20px; height: 20px; flex-shrink: 0; accent-color: #e8823f; }
+input, select, textarea { color-scheme: dark; }
+:is(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #e8823f !important;
+  outline-offset: 3px;
+}
+nav a { min-height: 44px; }
+summary { display: list-item; align-content: center; }
+progress { accent-color: #e8823f; }
+.skip-link { position: fixed; top: -100px; left: 12px; z-index: 100; padding: 12px; background: #1d1b19; color: #edeae5; }
+.skip-link:focus { top: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+@media (hover: none) { .media-controls { opacity: 1 !important; } }

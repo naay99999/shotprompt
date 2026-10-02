@@ -46,10 +46,10 @@
 
 **Interfaces:** Define ProviderPresetId='openrouter'|'gemini'|'ollama'|'local-compatible'|'custom'; CredentialMode='none'|'stored'|'legacy-env'; CredentialOperation={action:'keep'|'remove'}|{action:'replace',key:string}. Define ProfileDraft={name,presetId,config:ProviderConfig}, ProfileWrite={expectedRevision?:number,draft:ProfileDraft,credential:CredentialOperation}. ProviderProfile has id/revision/draft fields/credentialMode/credentialVersion:string|null/timestamps/check:ProfileCheck|null. ProfileView omits credentialVersion and adds keyPresent/vaultAvailable. ProfileCheck={fingerprint,revision,status:'ready'|'failed',checkedAt,errorCode:string|null}; ProviderRegistry={schemaVersion:1,activeProfileId:string|null,profiles:ProviderProfile[]}. ConnectionSnapshot={profileId,profileName,presetId,profileRevision,credentialMode,credentialVersion}; EvaluatorSnapshot.connection?:ConnectionSnapshot. ModelCatalogEntry={id,name,contextLength:number|null,inputUsdPerMillion:number|null,outputUsdPerMillion:number|null,textCapability:'supported'|'unknown',schemaSupport:'supported'|'unsupported'|'unknown'}; ModelCatalog={entries,fetchedAt,truncated,stale,errorCode?:string}. Export getProviderPresets(), createProfileDraft(presetId):ProfileDraft, parseProfileWrite(value):ProfileWrite, validateRuntimeProfile(profile):ProviderConfig. Runtime endpoint validator remains shared with existing provider-settings behavior; draft validator permits absent model/external opt-in but never invalid destination/limits.
 
-- [ ] Write contract tests with table-driven exact preset URLs/protocols; `expect(createProfileDraft('openrouter').config.baseUrl).toBe('https://openrouter.ai/api/v1')`; `expect(parseProfileWrite({draft:emptyModelDraft,credential:{action:'keep'}}).draft.config.model).toBe('')`; reject81-codepoint names,4097byte/CRLF keys, unknown presets, credential-bearing URLs/public-local URLs and timeout inversion. `validateRuntimeProfile` rejects missing model/cloud key/opt-in.
-- [ ] Run `bun test packages/core/test/ai-provider-contracts.test.ts`; expect FAIL for missing contracts.
-- [ ] Implement pure contracts/presets/parsers; fixed cloud destinations, no unknown secret fields copied into configs; no global environment dependency. Config optional provider identity for compatible transport is `presetId?:ProviderPresetId`; older configs lack it.
-- [ ] Run focused contracts plus `bun test packages/core/test/ai-analysis-contracts.test.ts`; expect PASS with unchanged v2/legacy options.
+- [x] Write contract tests with table-driven exact preset URLs/protocols; `expect(createProfileDraft('openrouter').config.baseUrl).toBe('https://openrouter.ai/api/v1')`; `expect(parseProfileWrite({draft:emptyModelDraft,credential:{action:'keep'}}).draft.config.model).toBe('')`; reject81-codepoint names,4097byte/CRLF keys, unknown presets, credential-bearing URLs/public-local URLs and timeout inversion. `validateRuntimeProfile` rejects missing model/cloud key/opt-in.
+- [x] Run `bun test packages/core/test/ai-provider-contracts.test.ts`; expect FAIL for missing contracts.
+- [x] Implement pure contracts/presets/parsers; fixed cloud destinations, no unknown secret fields copied into configs; no global environment dependency. Config optional provider identity for compatible transport is `presetId?:ProviderPresetId`; older configs lack it.
+- [x] Run focused contracts plus `bun test packages/core/test/ai-analysis-contracts.test.ts`; expect PASS with unchanged v2/legacy options.
 - [ ] Commit safely owned files: `feat(core): define AI connection profiles`.
 
 ## Task 2: Encrypted credential storage and DB migration
@@ -58,10 +58,10 @@
 
 **Interfaces:** DB table ai_credentials exported as aiCredentials: id TEXT PK,profileId TEXT,version INTEGER=1,ciphertext TEXT,nonce TEXT,authTag TEXT,createdAt INTEGER. CredentialScope={profileId,credentialVersion,protocol,baseUrl}; EncryptedCredential={ciphertext,nonce,authTag,version:1}. createCredentialVault({secretsDir,hasCredentials:()=>boolean}):CredentialVault with encrypt(scope,key):EncryptedCredential, decrypt(scope,cipher):string, available():boolean. Errors sanitized credential-vault-unavailable. Store functions belong to Task3, vault only crypto/files.
 
-- [ ] Write tests using isolated temp directories: encrypt/decrypt roundtrip; ciphertext differs on same key; `expect(JSON.stringify(cipher)).not.toContain(secret)`; wrong scope/tampered cipher fails; persisted master is32bytes and Unix mode0600; parallel first creation reuses winner; symlink/invalid master refused; removing master when hasCredentials=true never creates another file. DB migration twice retains old rows/scores148 and creates encrypted table once.
-- [ ] Run `bun test packages/db/test/ai-credentials.test.ts apps/server/test/credential-vault.test.ts`; expect FAIL missing migration/vault.
-- [ ] Implement idempotent migration, AES-256-GCM with12-byte nonce/16-byte tag and stable JSON AAD scope; master exclusive write, directory/file checks and memory lifetime. Do not name persistent master *.tmp (startup recovery sweeps temporary files). Fail closed on inaccessible/corrupt master.
-- [ ] Rerun focused plus existing DB migration suites; expect PASS.
+- [x] Write tests using isolated temp directories: encrypt/decrypt roundtrip; ciphertext differs on same key; `expect(JSON.stringify(cipher)).not.toContain(secret)`; wrong scope/tampered cipher fails; persisted master is32bytes and Unix mode0600; parallel first creation reuses winner; symlink/invalid master refused; removing master when hasCredentials=true never creates another file. DB migration twice retains old rows/scores148 and creates encrypted table once.
+- [x] Run `bun test packages/db/test/ai-credentials.test.ts apps/server/test/credential-vault.test.ts`; expect FAIL missing migration/vault.
+- [x] Implement idempotent migration, AES-256-GCM with12-byte nonce/16-byte tag and stable JSON AAD scope; master exclusive write, directory/file checks and memory lifetime. Do not name persistent master *.tmp (startup recovery sweeps temporary files). Fail closed on inaccessible/corrupt master.
+- [x] Rerun focused plus existing DB migration suites; expect PASS.
 - [ ] Commit only owned files/hunks: `feat(server): encrypt saved AI credentials`.
 
 ## Task 3: Profile persistence, migration and transactional guards
@@ -154,6 +154,15 @@
 - [x] Interfaces/types consistent; DTOs keep secret input separate, optional snapshot extension backward-compatible.
 - [x] Five Review Focus cases owned by explicit tests; tasks include deterministic failure/success evidence and no product implementation before approval.
 - [x] User reviews this written plan (approved: “ok continue implement”).
-- [ ] Execute Tasks1–9 using preserved Native execution and record actual checks.
+- [x] Execute implementation Tasks1–9 using preserved Native execution and record actual checks below. The planned browser/device acceptance remains unperformed; live paid-provider quality was not assessed.
+
+## Execution results (2026-10-03)
+
+- Implemented the profile registry/vault, provider catalog and OpenRouter routing, scoring-shaped connection check, routes, queue snapshots, Settings UI, docs and focused regressions. Final independent targeted review found no remaining actionable findings.
+- `bun run typecheck`: passed.
+- `bun run --cwd apps/web build --webpack`: passed. Turbopack mode previously hit the sandbox's local-port restriction; Webpack completed the production build.
+- Focused profile/catalog/settings suite: 14 passed, 0 failed.
+- `bun test`: 251 passed, 4 failed out of 255. The four failures are local HTTP fixture tests in `ai-analysis-integration.test.ts` and `analysis-provider.test.ts`; each fails at `Bun.serve({hostname:'127.0.0.1',port:0})` with `EADDRINUSE` in this sandbox. No product assertion failed. The other route compatibility regression passes independently.
+- Browser/device acceptance and live-provider checks were not performed. No implementation commits were created because the shared checkout contains pre-existing Project A/B/font changes; preserve the baseline ruling above.
 
 Before execution, read spec+plan; capture a fresh baseline in this plan's own scratch directory; inspect the current non-main checkout/worktree state. Follow repository instructions; do not reread/reuse previous plan scratch as this plan's baseline. The existing dependent A/B code is uncommitted, so native checkout reuse is appropriate unless a complete isolated state can be preserved safely. Nine tasks share the profile/vault/snapshot interfaces, so keep inline execution and one independent final reviewer. User requested implementation and approved the written plan; Native execution was selected for project B and is preserved here.

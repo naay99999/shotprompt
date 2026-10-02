@@ -9,13 +9,13 @@ import * as normalize from './steps/normalize'
 import * as extractAudio from './steps/extract-audio'
 import * as transcribe from './steps/transcribe'
 import * as detectScenes from './steps/detect-scenes'
-import * as detectHooks from './steps/detect-hooks'
-import * as thumbnails from './steps/thumbnails'
 
 export const PIPELINE_STEPS = ['normalize', 'extract-audio', 'transcribe', 'detect-scenes', 'detect-hooks', 'thumbnails'] as const
-type StepImpl = { run(db: DB, videoId: string, ctx: JobCtx): Promise<void>; satisfied(db: DB, videoId: string): boolean }
+export type StepImpl = { run(db: DB, videoId: string, ctx: JobCtx): Promise<void>; satisfied(db: DB, videoId: string): boolean }
 const DEFAULT_STEPS: Record<string, StepImpl> = {
-  normalize, 'extract-audio': extractAudio, transcribe, 'detect-scenes': detectScenes, 'detect-hooks': detectHooks, thumbnails,
+  normalize, 'extract-audio': extractAudio, transcribe, 'detect-scenes': detectScenes,
+  'detect-hooks': { satisfied: () => true, run: async () => {} },
+  thumbnails: { satisfied: () => true, run: async () => {} },
 }
 
 export function makePipelineRunner(db: DB, steps: Record<string, StepImpl> = DEFAULT_STEPS): JobRunner {

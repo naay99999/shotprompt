@@ -14,8 +14,8 @@ test('Eden client preserves video-list and settings response contracts', async (
   expect(videoResponse.error).toBeNull()
   expect(videoResponse.data).toEqual([{
     id: 'v-contract', filename: 'contract.mp4', path: '/tmp/contract.mp4',
-    duration: null, width: null, height: null, status: 'ready', language: 'th',
-    createdAt: 1, clipCount: 0,
+    activeAnalysisRunId: null, analysisOptionsJson: null, duration: null, width: null, height: null, status: 'ready', language: 'th',
+    whisperModel: null, createdAt: 1, languageName: 'Thai (ไทย)', clipCount: 0,
   }])
   expect(settingsResponse.error).toBeNull()
   expect(settingsResponse.data).toEqual({ whisperModel: 'large-v3' })

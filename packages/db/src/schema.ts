@@ -8,7 +8,10 @@ export const videos = sqliteTable('videos', {
   width: integer('width'),
   height: integer('height'),
   status: text('status').notNull(), // uploaded|processing|ready|failed
-  language: text('language').notNull(), // th|en
+  language: text('language').notNull(), // Whisper.cpp language code
+  whisperModel: text('whisper_model'),
+  activeAnalysisRunId: text('active_analysis_run_id'),
+  analysisOptionsJson: text('analysis_options_json'),
   createdAt: integer('created_at').notNull(),
 })
 export const jobs = sqliteTable('jobs', {
@@ -47,12 +50,17 @@ export const candidates = sqliteTable('candidates', {
   videoId: text('video_id').notNull(),
   start: real('start').notNull(),
   end: real('end').notNull(),
-  score: real('score').notNull(),
+  score: real('score'),
+  runId: text('run_id'),
+  assessmentJson: text('assessment_json'),
+  rank: integer('rank'),
+  isPrimary: integer('is_primary', { mode: 'boolean' }).notNull().default(true),
   thumbnailPath: text('thumbnail_path'),
 })
 export const clips = sqliteTable('clips', {
   id: text('id').primaryKey(),
   videoId: text('video_id').notNull(),
+  assessmentJson: text('assessment_json'),
   candidateId: text('candidate_id'), // soft reference, no FK
   start: real('start').notNull(),
   end: real('end').notNull(),
@@ -89,3 +97,19 @@ export const settings = sqliteTable('settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 })
+
+export const analysisRuns = sqliteTable('analysis_runs', {
+  id: text('id').primaryKey(), videoId: text('video_id').notNull(), jobId: text('job_id').notNull(), status: text('status').notNull(),
+  optionsJson: text('options_json').notNull(), engineVersion: text('engine_version').notNull(), sourceRevision: text('source_revision').notNull(),
+  createdAt: integer('created_at').notNull(), completedAt: integer('completed_at'), error: text('error'),
+  evaluatorMetadataJson: text('evaluator_metadata_json'), progressJson: text('progress_json'),
+});
+export const candidateFeedback = sqliteTable('candidate_feedback', {
+  candidateId: text('candidate_id').primaryKey(), videoId: text('video_id').notNull(), runId: text('run_id'),
+  verdict: text('verdict').notNull(), updatedAt: integer('updated_at').notNull(),
+});
+
+export const aiCredentials = sqliteTable('ai_credentials', {
+  id: text('id').primaryKey(), profileId: text('profile_id').notNull(), version: integer('version').notNull(),
+  ciphertext: text('ciphertext').notNull(), nonce: text('nonce').notNull(), authTag: text('auth_tag').notNull(), createdAt: integer('created_at').notNull(),
+});

@@ -16,5 +16,5 @@ export interface KeywordTier {
   keywords: string[]
 }
 
-export type Language = 'th' | 'en'
+export type Language = import('./languages').WhisperLanguage
 export type Aspect = '9:16' | '16:9' | 'original'

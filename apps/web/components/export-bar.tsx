@@ -1,86 +1,39 @@
-'use client'
-
-import { useState } from 'react'
-import { api } from '@/lib/api'
-import { ASPECT_LABEL, type Aspect } from '@/lib/format'
-import type { Clip } from '@/components/clip-strip'
-
-const ASPECTS: { value: Aspect; label: string }[] = (Object.keys(ASPECT_LABEL) as Aspect[]).map(value => ({
-  value,
-  label: ASPECT_LABEL[value],
-}))
-
-export function ExportBar({
-  clips,
-  exportSel,
-  onExported,
-}: {
-  clips: Clip[]
-  exportSel: Record<string, boolean>
-  onExported: () => void
-}) {
-  const [aspect, setAspect] = useState<Aspect>('9:16')
-  const [burnSubtitles, setBurnSubtitles] = useState(true)
-  const [exporting, setExporting] = useState(false)
-
-  const clipIds = new Set(clips.map(c => c.id))
-  const selectedIds = Object.keys(exportSel).filter(id => exportSel[id] && clipIds.has(id))
-  const selCount = selectedIds.length
-
-  async function startExport() {
-    if (selCount === 0 || exporting) return
-    setExporting(true)
-    try {
-      await api.exports.post({ clipIds: selectedIds, aspect, burnSubtitles })
-      onExported()
-    } finally {
-      setExporting(false)
-    }
+'use client';
+import { useEffect, useState } from 'react';
+import { api } from '@/lib/api';
+import { ASPECT_LABEL, type Aspect } from '@/lib/format';
+import { checkResponse } from '@/lib/ui-error';
+import { useSystem } from '@/lib/use-system';
+import { ErrorNotice, Help } from './ui-feedback';
+import { useNavigationGuard } from './navigation-guard';
+import type { Clip } from './clip-strip';
+export function ExportBar({ clips, exportSel, onExported }: { clips: Clip[]; exportSel: Record<string, boolean>; onExported: () => void }) {
+  const [aspect, setAspect] = useState<Aspect>('9:16');
+  const [burnSubtitles, setBurnSubtitles] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [notice, setNotice] = useState('');
+  const { system, error: systemError, loading, refresh } = useSystem();
+  const { request } = useNavigationGuard();
+  const exportReady = !!system?.ffmpeg && !!system.libx264;
+  const selectedIds = clips.filter(clip => exportSel[clip.id]).map(clip => clip.id);
+  useEffect(() => { if (system && !system.libass) setBurnSubtitles(false); }, [system]);
+  async function start() {
+    if (!selectedIds.length || busy || !exportReady) return;
+    setBusy(true); setError(null); setNotice('');
+    try { checkResponse(await api.exports.post({ clipIds: selectedIds, aspect, burnSubtitles })); onExported(); setNotice('เริ่มสร้างไฟล์แล้ว ดาวน์โหลดได้จากรายการด้านล่างเมื่อเสร็จ'); }
+    catch (error) { setError(error); } finally { setBusy(false); }
   }
-
-  return (
-    <div className="flex flex-none flex-wrap items-center gap-4 rounded-xl border border-line bg-surface px-4 py-3">
-      <div className="text-[13px] font-semibold">Export · เลือกแล้ว {selCount} คลิป</div>
-
-      <div className="flex gap-0.5 rounded-[9px] border border-line2 bg-surface2 p-[3px]">
-        {ASPECTS.map(a => (
-          <button
-            key={a.value}
-            type="button"
-            onClick={() => setAspect(a.value)}
-            className={`rounded-[6px] px-3.5 py-1.5 text-[12.5px] transition-colors ${
-              aspect === a.value ? 'bg-accent/[.16] text-accent' : 'text-dim hover:text-ink'
-            }`}
-          >
-            {a.label}
-          </button>
-        ))}
-      </div>
-
-      <button
-        type="button"
-        onClick={() => setBurnSubtitles(v => !v)}
-        className="flex items-center gap-2.5"
-      >
-        <div className={`relative h-5 w-[34px] rounded-full transition-colors ${burnSubtitles ? 'bg-accent' : 'bg-line3'}`}>
-          <div
-            className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-[left]"
-            style={{ left: burnSubtitles ? 16 : 2 }}
-          />
-        </div>
-        <span className="text-[12.5px] text-muted">ฝัง subtitle</span>
-      </button>
-
-      <div className="flex-1" />
-
-      <button
-        type="button"
-        onClick={startExport}
-        disabled={selCount === 0 || exporting}
-        className="rounded-[9px] bg-accent px-5 py-[9px] text-[13.5px] font-semibold text-[#1a120b] transition-[filter,opacity] hover:brightness-110 disabled:opacity-40"
-      >
-        {exporting ? 'กำลังเริ่ม export…' : selCount ? `Export ${selCount} คลิป` : 'Export'}
-      </button>
-    </div>
-  )
+  return <section className="space-y-3 rounded-xl border border-line3 bg-surface p-4"><h2 className="font-semibold">ส่งออกวิดีโอ · เลือกแล้ว {selectedIds.length} คลิป</h2>
+    <fieldset disabled={busy} className="flex flex-wrap gap-3"><legend className="mb-2 text-[14px]">รูปแบบภาพ</legend>{Object.entries(ASPECT_LABEL).map(([value, label]) => <label key={value} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-line3 px-3 text-[14px]"><input type="radio" name="export-aspect" checked={aspect === value} onChange={() => setAspect(value as Aspect)} />{label}</label>)}</fieldset>
+    <label className="flex min-h-11 cursor-pointer items-center gap-3 text-[14px]"><input type="checkbox" checked={burnSubtitles} disabled={busy || !system?.libass} onChange={event => setBurnSubtitles(event.target.checked)} />ใส่คำบรรยายลงในวิดีโอ</label>
+    <p className="text-[12px] text-muted">คำบรรยายที่ใส่ลงในภาพจะเปิด–ปิดภายหลังไม่ได้</p>
+    {system && exportReady && !system.libass && <p className="text-[12px] text-warn">เครื่องนี้ยังใส่คำบรรยายลงในภาพไม่ได้ คุณยังส่งออกวิดีโอและดาวน์โหลดคำบรรยายแยกได้</p>}
+    {system && !exportReady && <p className="text-[12px] text-warn">ติดตั้งเครื่องมือตัดต่อวิดีโอในหน้าเตรียมเครื่องก่อนส่งออก</p>}
+    <Help>แนวตั้งเหมาะกับการดูบนมือถือ แนวนอนเหมาะกับจอกว้าง ระบบปรับระดับเสียงอัตโนมัติระหว่างส่งออก (loudnorm 2-pass)</Help>
+    <ErrorNotice error={systemError} onRetry={refresh} /><ErrorNotice error={error} fallback="เริ่มสร้างไฟล์ไม่สำเร็จ กรุณาลองอีกครั้ง" />
+    <button type="button" disabled={!exportReady || !selectedIds.length || busy || loading || !!systemError} onClick={() => request(() => { void start(); })} className="rounded-lg bg-accent px-5 py-2 font-semibold text-bg">{busy ? 'กำลังเริ่ม…' : `ส่งออก ${selectedIds.length} คลิป`}</button>
+    {!selectedIds.length && <p className="text-[12px] text-muted">เลือกคลิปจากช่องทำเครื่องหมายใน “คลิปของฉัน” ก่อนส่งออก</p>}
+    <p role="status" className="text-[14px] text-ok">{notice}</p>
+  </section>;
 }

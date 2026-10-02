@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
+import '@vidstack/react/player/styles/base.css'
 import './globals.css'
+import { NavigationGuard } from '@/components/navigation-guard'
 
 export const metadata: Metadata = {
   title: 'ShotPrompt',
@@ -9,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="th">
-      <body className="bg-bg text-ink min-h-screen">{children}</body>
+      <body className="bg-bg text-ink min-h-screen"><NavigationGuard>{children}</NavigationGuard></body>
     </html>
   )
 }

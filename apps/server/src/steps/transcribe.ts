@@ -9,9 +9,14 @@ import { runCmd } from './spawn'
 
 export function satisfied(_db: DB, _videoId: string): boolean { return false }
 
+export function resolveWhisperModel(video: { whisperModel: string | null }, defaultModel: string): string {
+  return video.whisperModel ?? defaultModel
+}
+
 export async function run(db: DB, videoId: string, ctx: JobCtx) {
   const v = db.select().from(videos).where(eq(videos.id, videoId)).get()!
-  const model = modelPath(getSetting(db, 'whisperModel', 'large-v3'))
+  const modelName = resolveWhisperModel(v, getSetting(db, 'whisperModel', 'large-v3'))
+  const model = modelPath(modelName)
   let lastEmit = 0
   let progress = 0
   await runCmd('whisper-cli', buildWhisperArgs({ model, audio: join(videoDir(videoId), 'audio.wav'), language: v.language as Language }), ctx, {

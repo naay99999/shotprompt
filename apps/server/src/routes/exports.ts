@@ -3,7 +3,7 @@ import { desc, eq, inArray } from 'drizzle-orm'
 import { basename, extname, join } from 'node:path'
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { clips, clipSubtitles, exportsTable, jobs, videos, type DB } from '@shotprompt/db'
-import { buildASS, buildExportArgs, buildLoudnormMeasureArgs, parseLoudnorm, type Aspect } from '@shotprompt/core'
+import { buildASS, buildExportArgs, buildLoudnormMeasureArgs, parseLoudnorm, type Aspect, type Language } from '@shotprompt/core'
 import type { Ctx } from '../context'
 import type { JobRunner } from '../queue'
 import { emitEvent } from '../events'
@@ -25,7 +25,7 @@ export function makeExportRunner(db: DB): JobRunner {
       if (exp.burnSubtitles) {
         const rows = db.select().from(clipSubtitles).where(eq(clipSubtitles.clipId, clip.id)).all()
         assPath = join(dir, 'exports', `${exportId}.ass`)
-        await Bun.write(assPath, buildASS(rows, clip.start, clip.end, exp.aspect as Aspect, { x: video.width!, y: video.height! }))
+        await Bun.write(assPath, buildASS(rows, clip.start, clip.end, exp.aspect as Aspect, { x: video.width!, y: video.height! }, video.language as Language))
       }
       const { stderr } = await runCmd('ffmpeg', buildLoudnormMeasureArgs(video.path, clip.start, clip.end), ctx, { ignoreExitCode: true })
       const loudnorm = parseLoudnorm(stderr)

@@ -1,8 +1,8 @@
 import { readdirSync, rmSync, existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { inArray } from 'drizzle-orm'
-import { jobs, jobSteps, videos, exportsTable, type DB } from '@shotprompt/db'
-import { DATA_DIR, MODELS_DIR } from './env'
+import { analysisRuns, jobs, jobSteps, videos, exportsTable, type DB } from '@shotprompt/db'
+import { DATA_DIR, MODELS_DIR, videoDir } from './env'
 
 // A directory is "under" MODELS_DIR if it IS MODELS_DIR or nested inside it — compared
 // with a trailing separator so e.g. a sibling `models-other` dir doesn't false-match.
@@ -10,6 +10,11 @@ const underModelsDir = (dir: string) => dir === MODELS_DIR || dir.startsWith(MOD
 
 export function recover(db: DB) {
   const stale = ['running', 'queued']
+  for (const run of db.select().from(analysisRuns).where(inArray(analysisRuns.status, stale)).all()) {
+    rmSync(join(videoDir(run.videoId), 'thumbs', `${run.id}.tmp`), { recursive: true, force: true })
+    rmSync(join(videoDir(run.videoId), 'thumbs', run.id), { recursive: true, force: true })
+  }
+  db.update(analysisRuns).set({ status: 'failed', error: 'analysis interrupted: server restarted', completedAt: Date.now() }).where(inArray(analysisRuns.status, stale)).run()
   db.update(jobs).set({ status: 'failed', error: 'server restarted' }).where(inArray(jobs.status, stale)).run()
   db.update(jobSteps).set({ status: 'failed', error: 'server restarted' }).where(inArray(jobSteps.status, stale)).run()
   // A video/export still sitting in a non-terminal state at startup means its

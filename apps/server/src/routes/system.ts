@@ -3,6 +3,7 @@ import { createWriteStream, existsSync, readdirSync, renameSync, statSync } from
 import { join } from 'node:path'
 import type { DB } from '@shotprompt/db'
 import { videos } from '@shotprompt/db'
+import { WHISPER_LANGUAGES, WHISPER_MODELS } from '@shotprompt/core'
 import { DATA_DIR, getSetting, modelPath, setSetting, videoDir } from '../env'
 import { emitEvent, sseResponse } from '../events'
 
@@ -234,6 +235,8 @@ export const systemRoutes = (db: DB, runtime: SystemRuntime = systemRuntime) => 
       models: modelNames.map(name => ({ name, downloaded: existsSync(modelPath(name)) })),
       acceleration: 'unverified',
       installGuide: getInstallGuide(runtime.platform, runtime.architecture, command => runtime.hasCommand(command)),
+      selectableModels: WHISPER_MODELS,
+      languages: WHISPER_LANGUAGES,
     }
   })
   .get('/system/disk-usage', () => ({

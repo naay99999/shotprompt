@@ -28,11 +28,25 @@ describe('buildSRT / buildASS', () => {
   it('SRT is relative and numbered', () => {
     expect(buildSRT(subs, 10, 20)).toBe('1\n00:00:02,000 --> 00:00:04,000\nลดราคา')
   })
-  it('ASS carries Noto Sans Thai style and 9:16 PlayRes', () => {
+  it('ASS carries the selected language font and 9:16 PlayRes', () => {
     const ass = buildASS(subs, 10, 20, '9:16')
-    expect(ass).toContain('Noto Sans Thai')
+    expect(ass).toContain('Style: Default,Noto Sans Thai,64,')
     expect(ass).toContain('PlayResX: 1080')
     expect(ass).toContain('PlayResY: 1920')
     expect(ass).toContain('Dialogue: 0,0:00:02.00,0:00:04.00,Default,,0,0,0,,ลดราคา')
+  })
+  it('preserves non-Thai subtitle text', () => {
+    const ass = buildASS([{ start: 1, end: 2, text: '你好 مرحبا नमस्ते' }], 0, 3, '9:16')
+    expect(ass).toContain('Style: Default,Noto Sans Thai,64,')
+    expect(ass).toContain('Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,你好 مرحبا नमस्ते')
+  })
+  it('selects a bundled font family for the selected subtitle language', () => {
+    const japanese = buildASS(subs, 10, 20, '9:16', undefined, 'ja')
+    const tibetan = buildASS(subs, 10, 20, '9:16', undefined, 'bo')
+    const hebrew = buildASS(subs, 10, 20, '9:16', undefined, 'yi')
+
+    expect(japanese).toContain('Style: Default,Noto Sans CJK JP,64,')
+    expect(tibetan).toContain('Style: Default,Noto Serif Tibetan,64,')
+    expect(hebrew).toContain('Style: Default,Noto Sans Hebrew Thin,64,')
   })
 })

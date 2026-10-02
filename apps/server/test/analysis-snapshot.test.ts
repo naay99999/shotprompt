@@ -1,0 +1,21 @@
+import { expect, it } from 'bun:test';
+import { createDb, videos, segments, analysisRuns, candidateFeedback, clips } from '@shotprompt/db';
+import { eq } from 'drizzle-orm';
+import { analyzeHighlights, parseAnalysisOptions } from '@shotprompt/core';
+import { createAnalysisRun, loadAnalysisInput, publishAnalysisRun } from '../src/analysis-store';
+import { createClip, updateClip } from '../src/clip-service';
+it('snapshots the accepted result and feedback and preserves it after trim changes', () => {
+  const db = createDb(':memory:');
+  db.insert(videos).values({ id: 'v', path: '/x', filename: 'x', language: 'th', duration: 30, status: 'ready', createdAt: 1 }).run();
+  db.insert(segments).values({ videoId: 'v', start: 0, end: 30, text: 'ข้อผิดพลาด วิธีทำ ยกตัวอย่าง สรุปคือ' }).run();
+  const options = parseAnalysisOptions(undefined), input = loadAnalysisInput(db, 'v', options), run = createAnalysisRun(db, 'v', 'j', options);
+  db.update(analysisRuns).set({ status: 'running' }).run();
+  const rows = analyzeHighlights(input).map(r => ({ ...r, id: crypto.randomUUID(), thumbnailPath: '/tmp/x' })); publishAnalysisRun(db, run.id, input, rows);
+  db.insert(candidateFeedback).values({ candidateId: rows[0].id, videoId: 'v', runId: run.id, verdict: 'good', updatedAt: 1 }).run();
+  const clip = createClip(db, 'v', { candidateId: rows[0].id });
+  const snapshot = JSON.parse(clip.assessmentJson!);
+  expect(snapshot).toMatchObject({ runId: run.id, feedback: 'good', evaluatedStart: rows[0].start, evaluatedEnd: rows[0].end });
+  updateClip(db, clip.id, { start: 1 });
+  expect(db.select().from(clips).where(eq(clips.id, clip.id)).get()?.assessmentJson).toBe(clip.assessmentJson);
+  expect(createClip(db, 'v', { start: 2, end: 5 }).assessmentJson).toBeNull(); db.raw.close();
+});
