@@ -1,7 +1,7 @@
 # AI provider profiles and guided settings
 
 Date: 2026-10-02
-Status: conversational architecture and UI approved; written-spec review pending.
+Status: written spec approved by user (chat: “ok implement”); implementation-plan review pending.
 
 ## Intent and success criteria
 
@@ -147,6 +147,6 @@ Review particularly: credential destination binding, concurrent profile edits/ch
 - [x] User approved guided UI/UX (chat: “ok ตามที่แนะนำ”).
 - [x] Existing provider settings/transport, queues/snapshots and browser form explored.
 - [x] Written spec self-reviewed for scope, secrets, compatibility and activation invariants.
-- [ ] User approves this written spec.
+- [x] User approves this written spec (chat: “ok implement”).
 - [ ] Write and review implementation plan; retain Native execution preference.
 - [ ] Implement and verify after required approvals.
