@@ -153,7 +153,7 @@
 - [x] Spec approved; all sections mapped to contracts/vault/profiles/catalog/probe/API/runtime/state/UI/integration tasks.
 - [x] Interfaces/types consistent; DTOs keep secret input separate, optional snapshot extension backward-compatible.
 - [x] Five Review Focus cases owned by explicit tests; tasks include deterministic failure/success evidence and no product implementation before approval.
-- [ ] User reviews this written plan.
+- [x] User reviews this written plan (approved: “ok continue implement”).
 - [ ] Execute Tasks1–9 using preserved Native execution and record actual checks.
 
-Before execution, read spec+plan; capture a fresh baseline in this plan's own scratch directory; inspect the current non-main checkout/worktree state. Follow repository instructions; do not reread/reuse previous plan scratch as this plan's baseline. The existing dependent A/B code is uncommitted, so native checkout reuse is appropriate unless a complete isolated state can be preserved safely. Nine tasks share the profile/vault/snapshot interfaces, so keep inline execution and one independent final reviewer. User requested implementation, approved the written spec, and already chose Native; written-plan approval is the remaining skill gate.
+Before execution, read spec+plan; capture a fresh baseline in this plan's own scratch directory; inspect the current non-main checkout/worktree state. Follow repository instructions; do not reread/reuse previous plan scratch as this plan's baseline. The existing dependent A/B code is uncommitted, so native checkout reuse is appropriate unless a complete isolated state can be preserved safely. Nine tasks share the profile/vault/snapshot interfaces, so keep inline execution and one independent final reviewer. User requested implementation and approved the written plan; Native execution was selected for project B and is preserved here.
