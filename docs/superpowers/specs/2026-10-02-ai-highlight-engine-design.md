@@ -1,7 +1,7 @@
 # ShotPrompt: AI highlight discovery and scoring
 
 Date: 2026-10-02
-Status: Written design for user review; implementation has not started.
+Status: User approved the written spec on 2026-10-02; implementation plan written for review. Implementation has not started.
 
 ## Intent and agreed decisions
 
@@ -157,7 +157,8 @@ Real-model acceptance requires the user's configured endpoint/model and user-app
 - [x] User chose support for local API models and external endpoints (option 1).
 - [x] Read current evaluator, API, options, migrations, pipeline integration and web controls.
 - [x] Written spec reviewed for scope, budgets, compatibility and failure paths.
-- [ ] User reviews and approves this written spec.
-- [ ] Write implementation plan and select execution method.
+- [x] User reviews and approves this written spec (chat: “ok”).
+- [x] Write implementation plan; preserve the previously selected Native execution method.
+- [ ] User reviews and approves the written implementation plan.
 - [ ] Implement and verify project B.
 - [ ] Design project C separately.
