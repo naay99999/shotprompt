@@ -12,6 +12,8 @@ import { ScoreDetails } from './score-details'
 import { fmtTime } from '@/lib/format'
 import { cropPreviewRect } from '@/lib/video-crop'
 import type { Clip } from '@/components/clip-strip'
+import { Scissors, BoundingBox, Subtitles, X, Trash } from '@phosphor-icons/react'
+import { handleTabKeyDown } from '@/lib/tab-keyboard'
 
 type SubtitleRow = { id?: number; start: number; end: number; text: string }
 
@@ -64,10 +66,12 @@ function CropOverlay({
   )
 }
 
-export function ClipEditor({ clip, duration, videoContainerRef, videoWidth, videoHeight, onClose, onUpdated, onDeleted }: {
+export function ClipEditor({ clip, duration, videoContainerRef, videoWidth, videoHeight, onClose, onUpdated, onDeleted, active = true }: {
   clip: Clip; duration: number; videoContainerRef: RefObject<HTMLDivElement | null>; videoWidth: number; videoHeight: number;
   onClose: () => void; onUpdated: () => void; onDeleted: () => void;
+  active?: boolean;
 }) {
+  const [tool, setTool] = useState<'trim' | 'frame' | 'subtitles'>('trim');
   const [start, setStart] = useState(clip.start);
   const [end, setEnd] = useState(clip.end);
   const [crop, setCrop] = useState(clip.cropOffset);
@@ -156,27 +160,29 @@ export function ClipEditor({ clip, duration, videoContainerRef, videoWidth, vide
     dirtyRef.current = true; setSubsDirty(true); setNotice('');
     setSubtitles(rows => rows.map((row, i) => i === index ? { ...row, ...patch } : row));
   }
-  return <section aria-label="แก้ไขคลิป" className="flex w-full min-w-0 flex-none flex-col rounded-2xl border border-line3 bg-surface lg:w-[360px]">
-    <CropOverlay containerRef={videoContainerRef} offset={crop} videoWidth={videoWidth} videoHeight={videoHeight} />
-    {clip.assessment && <div className="space-y-2 border-b border-line3 p-4 text-[12px]"><p className="text-muted">{isAssessmentStale(clip.assessment, clip.start, clip.end) ? 'คะแนนของช่วงแนะนำเดิม — ช่วงคลิปถูกแก้ไขแล้ว' : 'ผลประเมินตอนเพิ่มคลิป'}</p><ScoreDetails assessment={clip.assessment.assessment} />{clip.assessment.evaluatorMetadata && <p className="break-words text-muted">โมเดล {clip.assessment.evaluatorMetadata.snapshot.provider.model} · เกณฑ์ {clip.assessment.evaluatorMetadata.snapshot.rubricVersion}</p>}</div>}
-    <header className="flex items-center justify-between gap-2 border-b border-line3 p-4"><h2 className="font-semibold">แก้ไขคลิป</h2><button type="button" aria-label="ปิดการแก้ไขคลิป" onClick={() => request(onClose)} className="rounded-lg border border-line3 px-3">ปิด</button></header>
-    <div className="space-y-5 p-4">
+  return <section aria-label="แก้ไขคลิป" className="sp-tool-panel">
+    {active && tool === 'frame' && <CropOverlay containerRef={videoContainerRef} offset={crop} videoWidth={videoWidth} videoHeight={videoHeight} />}
+    <header className="flex items-center justify-between gap-2"><div><h2 className="sp-section-title">แก้ไขคลิป</h2><p className="mt-1 text-[12px] text-muted tabular-nums">{fmtTime(clip.start)} – {fmtTime(clip.end)}</p></div><button type="button" aria-label="ปิดการแก้ไขคลิป" onClick={() => request(onClose)} className="sp-button sp-button-quiet"><X size={17} aria-hidden="true" /></button></header>
+    <div className="sp-tabs mb-5" role="tablist" aria-label="เครื่องมือตัดต่อ" onKeyDown={handleTabKeyDown}>{([
+      ['trim', 'ตัดช่วง', Scissors], ['frame', 'จัดเฟรม', BoundingBox], ['subtitles', 'คำบรรยาย', Subtitles],
+    ] as const).map(([key, label, Icon]) => <button key={key} type="button" role="tab" tabIndex={tool === key ? 0 : -1} id={`tool-${clip.id}-${key}`} aria-selected={tool === key} aria-controls={`panel-${clip.id}-${key}`} onClick={() => setTool(key)} className="sp-tab px-2 text-[12px]"><Icon size={15} aria-hidden="true" />{label}</button>)}</div>
+    <div className="space-y-5">
       <p role="status" className="text-[12px] text-muted">{saving || autoSaving > 0 ? 'กำลังบันทึก…' : subsDirty ? 'มีคำบรรยายที่ยังไม่บันทึก' : boundsDirty ? 'มีการแก้ไขที่ยังไม่บันทึก' : notice || 'เวลาและการจัดเฟรมจะบันทึกอัตโนมัติ'}</p>
       <ErrorNotice error={error} fallback="บันทึกไม่สำเร็จ การแก้ไขยังอยู่ในหน้านี้ กรุณาลองบันทึกอีกครั้ง" />
       <fieldset disabled={saving} className="space-y-5">
-        <div><h3 className="mb-2 font-semibold">ตัดช่วงเวลา</h3><div className="grid grid-cols-2 gap-3">
+        <div role="tabpanel" id={`panel-${clip.id}-trim`} aria-labelledby={`tool-${clip.id}-trim`} hidden={tool !== 'trim'}><h3 className="mb-2 font-medium">เวลาเริ่มและจบ</h3><div className="grid grid-cols-2 gap-3">
           <label className="text-[12px] text-muted">เริ่ม (วินาที)<input type="number" min={0} max={duration} step={0.1} value={start} onChange={event => setStart(event.currentTarget.valueAsNumber)} className="mt-1 w-full min-w-0 rounded-lg border border-line3 bg-bg px-2 py-2 text-[14px] text-ink" /></label>
           <label className="text-[12px] text-muted">จบ (วินาที)<input type="number" min={0} max={duration} step={0.1} value={end} onChange={event => setEnd(event.currentTarget.valueAsNumber)} className="mt-1 w-full min-w-0 rounded-lg border border-line3 bg-bg px-2 py-2 text-[14px] text-ink" /></label>
         </div>{invalidRange ? <p role="alert" className="mt-2 text-[12px] text-err">{invalidRange}</p> : <p className="mt-2 text-[12px] text-muted">{fmtTime(start)} – {fmtTime(end)} · ความยาว {(end - start).toFixed(1)} วินาที</p>}</div>
-        <label className="block text-[14px]">จัดเฟรมแนวตั้ง (9:16)<span className="ml-2 text-[12px] text-accent">{cropLabel(crop)}</span>
+        <div role="tabpanel" id={`panel-${clip.id}-frame`} aria-labelledby={`tool-${clip.id}-frame`} hidden={tool !== 'frame'}><label className="block text-[14px]">จัดเฟรมแนวตั้ง (9:16)<span className="ml-2 text-[12px] text-accent">{cropLabel(crop)}</span>
           <input type="range" min={-100} max={100} value={Math.round(crop * 100)} onChange={event => setCrop(Number(event.target.value) / 100)} className="mt-2 w-full" />
           <span className="flex justify-between text-[12px] text-muted"><span>ซ้าย</span><span>กลาง</span><span>ขวา</span></span>
         </label>
-        <p className="text-[12px] text-muted">กรอบสีส้มใช้เมื่อส่งออกแนวตั้งเท่านั้น</p>
-        <div className="space-y-3"><h3 className="font-semibold">คำบรรยาย ({subtitles.length})</h3>
+        <p className="mt-3 text-[12px] text-muted">เลื่อนกรอบเพื่อจัดสิ่งที่อยู่ในภาพ กรอบนี้ใช้เมื่อส่งออกแนวตั้ง</p></div>
+        <div role="tabpanel" id={`panel-${clip.id}-subtitles`} aria-labelledby={`tool-${clip.id}-subtitles`} hidden={tool !== 'subtitles'} className="space-y-3"><h3 className="font-medium">คำบรรยาย ({subtitles.length})</h3>
           <ErrorNotice error={loadError} onRetry={loadSubtitles} />{invalidSubtitles && <p role="alert" className="text-err">{invalidSubtitles}</p>}{loading && <p role="status">กำลังโหลดคำบรรยาย…</p>}
           {!loading && !loadError && subtitles.length === 0 && <p className="text-[14px] text-muted">ไม่มีคำบรรยายในช่วงนี้ ลองขยายช่วงเวลาหรือถอดเสียงใหม่</p>}
-          {subtitles.map((row, index) => <div key={row.id ?? index} className="space-y-2 rounded-lg border border-line3 bg-bg p-3">
+          {subtitles.map((row, index) => <div key={row.id ?? index} className="space-y-2 border-b border-line3 pb-4">
             <label className="block text-[12px] text-muted">คำบรรยายบรรทัดที่ {index + 1}<textarea rows={2} value={row.text} disabled={loading || !!loadError} onChange={event => editSubtitle(index, { text: event.target.value })} className="mt-1 w-full resize-y rounded border border-line3 bg-surface p-2 text-[14px] text-ink" /></label>
             <details><summary className="cursor-pointer text-[12px] text-muted">เวลาแสดง {fmtTime(row.start)} – {fmtTime(row.end)}</summary><div className="grid grid-cols-2 gap-2">
               <label className="text-[12px]">เริ่ม (วินาที)<input type="number" disabled={loading || !!loadError} step={0.1} value={row.start} onChange={event => editSubtitle(index, { start: event.target.valueAsNumber })} className="w-full min-w-0 rounded border border-line3 p-2" /></label>
@@ -185,10 +191,11 @@ export function ClipEditor({ clip, duration, videoContainerRef, videoWidth, vide
           </div>)}
         </div>
       </fieldset>
-      <button type="button" disabled={saving || loading || !!loadError || !!invalidRange || !!invalidSubtitles || (!subsDirty && !boundsDirty)} onClick={() => void saveAll()} className="w-full rounded-lg bg-accent px-4 py-2 font-semibold text-bg">{saving ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}</button>
-      <a href={`${API_BASE}/clips/${clip.id}/srt`} className="inline-flex items-center text-[14px] text-accent">ดาวน์โหลดคำบรรยาย (.srt)</a>
+      <button type="button" disabled={saving || loading || !!loadError || !!invalidRange || !!invalidSubtitles || (!subsDirty && !boundsDirty)} onClick={() => void saveAll()} className="sp-button sp-button-primary w-full">{saving ? 'กำลังบันทึก…' : 'บันทึกการแก้ไข'}</button>
+      <a hidden={tool !== 'subtitles'} href={`${API_BASE}/clips/${clip.id}/srt`} className="inline-flex items-center text-[13px] text-accent">ดาวน์โหลดคำบรรยาย (.srt)</a>
       {subsDirty && <p className="text-[12px] text-muted">บันทึกก่อนดาวน์โหลด เพื่อให้ไฟล์มีข้อความที่แก้ล่าสุด</p>}
-      <button type="button" onClick={() => setConfirmDelete(true)} disabled={saving || autoSaving > 0} className="block w-full rounded-lg border border-err/40 px-4 py-2 text-err">ลบคลิปนี้</button>
+      {clip.assessment && <details className="border-t border-line3 pt-3 text-[12px]"><summary className="cursor-pointer text-muted">ผลประเมินจาก AI</summary><div className="mt-3 space-y-2"><p className="text-muted">{isAssessmentStale(clip.assessment, clip.start, clip.end) ? 'ช่วงคลิปถูกแก้ไขแล้ว คะแนนนี้เป็นของช่วงเดิม' : 'ผลประเมินตอนเพิ่มคลิป'}</p><ScoreDetails assessment={clip.assessment.assessment} />{clip.assessment.evaluatorMetadata && <p className="break-words text-muted">โมเดล {clip.assessment.evaluatorMetadata.snapshot.provider.model} · เกณฑ์ {clip.assessment.evaluatorMetadata.snapshot.rubricVersion}</p>}</div></details>}
+      <button type="button" onClick={() => setConfirmDelete(true)} disabled={saving || autoSaving > 0} className="sp-button sp-button-quiet w-full text-err"><Trash size={15} aria-hidden="true" />ลบคลิปนี้</button>
       {confirmDelete && <ConfirmDialog title="ลบคลิปนี้?" onClose={() => setConfirmDelete(false)} onConfirm={async () => {
         await enqueue(async () => { checkResponse(await api.clips({ id: clip.id }).delete()); }); register(null); onDeleted();
       }}><p>คลิปช่วง {fmtTime(clip.start)} – {fmtTime(clip.end)} รวมคำบรรยายและไฟล์ส่งออกของคลิปนี้จะถูกลบถาวร วิดีโอต้นฉบับในคลังจะยังอยู่</p></ConfirmDialog>}

@@ -3,6 +3,7 @@
 import type { ClipAssessmentSnapshot } from '@shotprompt/core'
 import { API_BASE } from '@/lib/api'
 import { fmtTime } from '@/lib/format'
+import { Scissors } from '@phosphor-icons/react'
 
 export type Clip = {
   id: string
@@ -15,19 +16,6 @@ export type Clip = {
   cropOffset: number
   thumbnailPath: string | null
   createdAt: number
-}
-
-const GRADIENTS = [
-  'linear-gradient(135deg,#3a2c22,#241d18)',
-  'linear-gradient(135deg,#28302c,#1b201d)',
-  'linear-gradient(135deg,#33272b,#211a1c)',
-  'linear-gradient(135deg,#2f2b22,#1f1c17)',
-]
-
-function gradientFor(id: string) {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return GRADIENTS[h % GRADIENTS.length]
 }
 
 export function ClipStrip({
@@ -47,19 +35,18 @@ export function ClipStrip({
 }) {
   return (
     <section aria-label="คลิปของฉัน" className="space-y-3">
-      <h2 className="font-semibold">คลิปของฉัน ({clips.length})</h2>
-      <p className="text-[12px] text-muted">เปิดคลิปเพื่อแก้ไข และเลือกช่องทำเครื่องหมายสำหรับคลิปที่ต้องการส่งออก</p>
-      {clips.length === 0 && <p className="rounded-xl border border-dashed border-line3 p-5 text-[14px] text-muted">ยังไม่มีคลิป เลือก “เพิ่มเป็นคลิป” จากช่วงแนะนำ หรือกำหนดเวลาเองในแถบเวลา</p>}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">{clips.map(clip => (
-        <article key={clip.id} className={`min-w-0 rounded-xl border bg-surface p-3 ${selectedClipId === clip.id ? 'border-accent' : 'border-line3'}`}>
-          <button type="button" aria-pressed={selectedClipId === clip.id} onClick={() => onSelect(clip.id)} className="w-full rounded-lg text-left">
-            <span className="relative mb-2 block h-24 overflow-hidden rounded-lg" style={{ background: gradientFor(clip.id) }}>
-              {clip.candidateId && <img src={`${API_BASE}/videos/${videoId}/thumb/${clip.candidateId}.jpg`} alt="" className="h-full w-full object-cover" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} />}
+      <div className="flex items-center justify-between gap-2"><h2 className="sp-section-title">คลิปของฉัน</h2><span className="text-[12px] text-muted tabular-nums">{clips.length} คลิป</span></div>
+      <p className="text-[12px] text-muted">เลือกคลิปเพื่อแก้ไข หรือทำเครื่องหมายเพื่อส่งออกหลายคลิป</p>
+      {clips.length === 0 && <div className="sp-empty"><Scissors size={28} aria-hidden="true" className="mx-auto mb-3 text-accent" /><p className="font-medium text-ink">สร้างคลิปแรกของคุณ</p><p className="mt-2 text-[13px]">ลากเลือกช่วงบน timeline หรือเลือกจาก AI แนะนำ</p></div>}
+      <div className="space-y-2">{clips.map((clip, index) => (
+        <article key={clip.id} className="sp-clip-row" data-selected={selectedClipId === clip.id}>
+          <button type="button" aria-pressed={selectedClipId === clip.id} onClick={() => onSelect(clip.id)} className="flex min-w-0 flex-1 items-center gap-2 rounded text-left">
+            <span className="sp-clip-thumbnail" data-motion-image>
+              {clip.candidateId ? <img src={`${API_BASE}/videos/${videoId}/thumb/${clip.candidateId}.jpg`} alt="" className="h-full w-full object-cover" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} /> : <Scissors size={18} aria-hidden="true" />}
             </span>
-            <span className="block text-[14px]">แก้ไขคลิป {fmtTime(clip.start)} – {fmtTime(clip.end)}</span>
-            <span className="text-[12px] text-muted">ความยาว {Math.round(clip.end - clip.start)} วินาที</span>
+            <span className="min-w-0"><span className="block text-[13px] font-medium">คลิป {index + 1}</span><span className="block text-[11px] text-muted tabular-nums">{fmtTime(clip.start)} – {fmtTime(clip.end)}</span><span className="block text-[11px] text-muted">{Math.round(clip.end - clip.start)} วินาที</span></span>
           </button>
-          <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-3 text-[14px]"><input type="checkbox" checked={!!exportSel[clip.id]} onChange={() => onToggleExport(clip.id)} />เลือกส่งออกคลิปนี้</label>
+          <label className="flex min-h-11 items-center"><input aria-label={`เลือกคลิป ${index + 1} เพื่อส่งออก`} type="checkbox" checked={!!exportSel[clip.id]} onChange={() => onToggleExport(clip.id)} /></label>
         </article>
       ))}</div>
     </section>

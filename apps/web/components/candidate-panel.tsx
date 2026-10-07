@@ -28,8 +28,9 @@ export function CandidatePanel({ videoId, candidates, clips, onSeek, onAccepted,
   const selected = analysis.history.find(run => run.id === analysis.selectedRunId);
   const tags = [...new Set(analysis.candidates.flatMap(c => toAnalysisDisplay(c).tags))];
   const displayedRun = selected ?? analysis.active;
-  return <section aria-label="ช่วงที่แนะนำ" className="w-full min-w-0 space-y-4 rounded-2xl border border-line3 bg-surface p-4 lg:w-[360px]">
-    <div className="flex items-center justify-between gap-2"><h2 className="font-semibold">ช่วงที่แนะนำ ({candidates.length})</h2><Help label="คะแนนหมายถึงอะไร?">{SCORE_HELP}</Help></div>
+  return <section aria-label="ช่วงที่แนะนำ" className="w-full min-w-0 space-y-4">
+    <div className="flex items-center justify-between gap-2"><h2 className="sp-section-title">ช่วงที่แนะนำ</h2><span className="text-[12px] text-muted tabular-nums">{candidates.length} ช่วง</span></div>
+    <Help label="คะแนนหมายถึงอะไร?">{SCORE_HELP}</Help>
     {analysis.providerConfigured === false && <p className="text-[13px] text-muted">ตั้งค่า endpoint และโมเดลก่อนวิเคราะห์ <Link href="/settings" className="text-accent underline">ตั้งค่า AI →</Link></p>}
     {displayedRun && <p className="break-words text-[12px] text-muted">{analysisRunLabel(displayedRun)}</p>}
     <details className="rounded-lg border border-line3 p-3"><summary className="cursor-pointer text-[14px] font-semibold">ตั้งค่าการคัดช่วง / ประเมินใหม่</summary><form className="mt-3 space-y-3" onSubmit={event => { event.preventDefault(); void analysis.reanalyze(); }}>
@@ -48,19 +49,18 @@ export function CandidatePanel({ videoId, candidates, clips, onSeek, onAccepted,
     </div>
     <ErrorNotice error={error} /><p role="status" className="text-[12px] text-ok">{notice}</p>
     {!candidates.length && !analysis.loading && <p className="text-[14px] text-muted">ไม่มีช่วงที่ตรงกับตัวกรอง ลองเปลี่ยนการตั้งค่า หรือเลือกเวลาเริ่มและจบจากแถบเวลา</p>}
-    <ul className="space-y-3">{candidates.map((candidate, index) => <li key={candidate.id} className="space-y-3 rounded-xl border border-line3 p-3">
+    <ul className="sp-candidate-list">{candidates.map((candidate, index) => <li key={candidate.id} className="sp-candidate-row space-y-2">
       <button type="button" onClick={() => onSeek(candidate.start)} className="flex w-full items-center gap-3 rounded-lg text-left" aria-label={`ดูช่วงที่ ${index + 1} เริ่ม ${fmtTime(candidate.start)}`}>
-        <img src={`${API_BASE}/videos/${videoId}/thumb/${candidate.id}.jpg`} alt="" className="h-12 w-20 flex-none rounded bg-line2 object-cover" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} />
-        <span className="min-w-0 text-[14px]"><span className="block break-words font-semibold">{toAnalysisDisplay(candidate).title}</span><span className="block">{fmtTime(candidate.start)} – {fmtTime(candidate.end)}</span><span className="block text-[12px] text-muted">{Math.round(candidate.end - candidate.start)} วินาที</span><span className="block font-semibold text-accent">{formatAnalysisScore(candidate)}</span></span>
+        <span className="sp-clip-thumbnail" data-motion-image><img src={`${API_BASE}/videos/${videoId}/thumb/${candidate.id}.jpg`} alt="" className="h-full w-full object-cover" onError={event => { event.currentTarget.style.visibility = 'hidden'; }} /></span>
+        <span className="min-w-0 text-[12px]"><span className="block break-words font-medium text-ink">{toAnalysisDisplay(candidate).title}</span><span className="mt-1 block text-[11px] text-muted tabular-nums">{fmtTime(candidate.start)} – {fmtTime(candidate.end)}</span><span className="block text-[11px] text-muted">{Math.round(candidate.end - candidate.start)} วินาที</span><span className="block text-[12px] text-accent">{formatAnalysisScore(candidate)}</span></span>
       </button>
       {!candidate.isPrimary && <p className="text-[12px] text-muted">{toAnalysisDisplay(candidate).suppressionLabel ?? 'ตัวเลือกเพิ่มเติม'}</p>}
-      {candidate.assessment && <ScoreDetails assessment={candidate.assessment} onSeek={onSeek} />}
-      <button type="button" disabled={accepted.has(candidate.id) || accepting[candidate.id] || candidate.end - candidate.start < 2} className="w-full rounded-lg border border-line3 px-3 py-2 text-[14px] text-accent disabled:opacity-50" onClick={async () => {
+      <button type="button" disabled={accepted.has(candidate.id) || accepting[candidate.id] || candidate.end - candidate.start < 2} className="sp-button w-full text-[12px] disabled:opacity-50" onClick={async () => {
         setAccepting(old => ({ ...old, [candidate.id]: true })); setError(null); setNotice('');
         try { checkResponse(await api.videos({ id: videoId }).clips.post({ candidateId: candidate.id })); setNotice('เพิ่มคลิปแล้ว ดูได้ที่คลิปของฉัน'); onAccepted(); }
         catch (error) { setError(error); } finally { setAccepting(old => ({ ...old, [candidate.id]: false })); }
       }}>{accepted.has(candidate.id) ? '✓ เพิ่มเป็นคลิปแล้ว' : accepting[candidate.id] ? 'กำลังเพิ่ม…' : candidate.end - candidate.start < 2 ? 'ช่วงนี้สั้นกว่า 2 วินาที' : 'เพิ่มเป็นคลิป'}</button>
-      <CandidateFeedback videoId={videoId} candidate={candidate} onSaved={() => void analysis.refresh()} />
+      <details className="text-[12px] text-muted"><summary className="cursor-pointer">รายละเอียดและ feedback</summary><div className="mt-3 space-y-3">{candidate.assessment && <ScoreDetails assessment={candidate.assessment} onSeek={onSeek} />}<CandidateFeedback videoId={videoId} candidate={candidate} onSaved={() => void analysis.refresh()} /></div></details>
     </li>)}</ul>
   </section>;
 }

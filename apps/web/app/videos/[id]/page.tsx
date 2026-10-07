@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { handleTabKeyDown } from '@/lib/tab-keyboard'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -33,6 +34,8 @@ import type { WhisperModel } from '@/lib/whisper-options'
 import { useAnalysis } from '@/lib/use-analysis'
 import { filterCandidates } from '@/lib/analysis-view'
 import { useEvents } from '@/lib/use-events'
+import { ArrowLeft, ArrowClockwise, DownloadSimple, Scissors, Sparkle, X, SlidersHorizontal } from '@phosphor-icons/react'
+import { exportSelectionForWorkspace } from '@/lib/workspace-state'
 
 type Video = {
   id: string
@@ -161,6 +164,8 @@ export default function WorkspacePage() {
   const [repairing, setRepairing] = useState(false)
   const [modelPrompt, setModelPrompt] = useState<'retry' | 'repair' | null>(null)
   const [exportsTick, setExportsTick] = useState(0)
+  const [listTab, setListTab] = useState<'clips' | 'candidates'>('clips')
+  const [exportOpen, setExportOpen] = useState(false)
 
   const playerRef = useRef<MediaPlayerInstance>(null)
   const editorPanelRef = useRef<HTMLDivElement>(null)
@@ -213,10 +218,11 @@ export default function WorkspacePage() {
   }
 
   function selectClip(clipId: string) {
-    if (clipId === selectedClipId) return
+    if (clipId === selectedClipId) { setExportOpen(false); return }
     requestNavigation(() => {
     const clip = clips.find(row => row.id === clipId)
     setSelectedClipId(clipId)
+    setExportOpen(false)
     const range = clip && previewRangeForClip(clip)
     setPreviewRange(range ?? null)
     if (range) setVideoTime(range.start)
@@ -238,7 +244,17 @@ export default function WorkspacePage() {
   }
 
   async function createRange(start: number, end: number) {
-    checkResponse(await api.videos({ id }).clips.post({ start, end }))
+    const created = checkResponse(await api.videos({ id }).clips.post({ start, end })).data
+    if (created) {
+      setClips(previous => [...previous, created as Clip])
+      setListTab('clips')
+      requestNavigation(() => {
+        setSelectedClipId(created.id)
+        setExportOpen(false)
+        setPreviewRange({ start, end })
+        setVideoTime(start)
+      })
+    }
     refetchAll()
   }
 
@@ -311,44 +327,44 @@ export default function WorkspacePage() {
   const isReady = video.status === 'ready'
   const duration = video.duration ?? 0
   const selectedClip = clips.find(c => c.id === selectedClipId) ?? null
+  const selectionForExport = exportSelectionForWorkspace(clips, exportSel, selectedClipId)
+  const exportCount = Object.keys(selectionForExport).length
 
   return (
-    <AppShell active="library">
-      <div className="flex min-w-0 flex-col">
-        <div className="flex flex-none flex-wrap items-center gap-3.5 border-b border-line px-[22px] py-3">
+    <AppShell active="library" workspace={isReady}>
+      <div className="sp-workspace-page">
+        <div className="sp-workspace-toolbar">
           <Link
             href="/"
-            className="rounded-lg px-3 py-1.5 text-[14px] text-muted transition-colors hover:bg-line2 hover:text-ink"
+            aria-label="คลังวิดีโอ"
+            className="sp-button sp-button-quiet"
           >
-            ← คลังวิดีโอ
+            <ArrowLeft size={17} aria-hidden="true" /><span className="hidden sm:inline">คลังวิดีโอ</span>
           </Link>
-          <div className="h-[18px] w-px bg-line2" />
-          <div className="truncate text-[14.5px] font-semibold">{video.filename}</div>
-          <div className="font-mono text-[12px] text-faint">
-            {video.duration ? fmtTime(video.duration) : '--:--:--'} · {video.languageName} · {transcriptionLabel(video.whisperModel)}
-          </div>
-          <div className="flex-1" />
+          <div className="min-w-0 flex-1"><h1 className="truncate text-[14px] font-medium" title={video.filename}>{video.filename}</h1><p className="mt-1 text-[11px] text-muted tabular-nums">{video.duration ? fmtTime(video.duration) : '--:--:--'} · {video.languageName} · {transcriptionLabel(video.whisperModel)}</p></div>
           {isProcessing && (
             <button
               type="button"
               onClick={cancelJob}
               disabled={canceling || !job}
-              className="rounded-lg border border-err/35 px-3.5 py-[7px] text-[14px] text-err transition-colors hover:bg-err/10 disabled:opacity-50"
+              className="sp-button text-err"
             >
               {canceling ? 'กำลังยกเลิก…' : 'ยกเลิกงาน'}
             </button>
           )}
-          {isReady && (
+          {isReady && <>
             <button
               type="button"
               onClick={repair}
               disabled={repairing}
-              className="rounded-lg border border-line3 px-3.5 py-[7px] text-[14px] text-muted transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
-
+              className="sp-button sp-button-quiet"
+              aria-label="ถอดเสียงและหาช่วงแนะนำใหม่"
+              title="ถอดเสียงและหาช่วงแนะนำใหม่"
             >
-              {repairing ? 'กำลังเริ่ม…' : 'ถอดเสียงและหาช่วงแนะนำใหม่'}
+              <ArrowClockwise size={17} aria-hidden="true" /><span className="hidden xl:inline">{repairing ? 'กำลังเริ่ม…' : 'ถอดเสียงใหม่'}</span>
             </button>
-          )}
+            <button type="button" aria-expanded={exportOpen} aria-controls="workspace-export-panel" onClick={() => setExportOpen(open => !open)} className="sp-button sp-button-primary"><DownloadSimple size={17} aria-hidden="true" />ส่งออก{exportCount > 0 ? ` (${exportCount})` : ''}</button>
+          </>}
         </div>
 
         <div className="px-4"><ErrorNotice error={loadError} onRetry={refetchAll} /><ErrorNotice error={actionError} /></div>
@@ -380,8 +396,18 @@ export default function WorkspacePage() {
         )}
 
         {isReady && (
-          <div className="flex min-w-0 flex-col items-start gap-[18px] px-4 py-[18px] lg:flex-row lg:px-[22px]">
-            <div className="flex w-full min-w-0 flex-1 flex-col gap-4">
+          <div className="sp-editor-grid">
+            <aside className="sp-clip-sidebar" aria-label="รายการคลิปและช่วงแนะนำ">
+              <div className="sp-sidebar-heading"><div role="tablist" aria-label="เลือกแหล่งคลิป" className="sp-tabs" onKeyDown={handleTabKeyDown}>
+                <button type="button" id="workspace-clips-tab" role="tab" tabIndex={listTab === 'clips' ? 0 : -1} aria-selected={listTab === 'clips'} aria-controls="workspace-clips-panel" className="sp-tab px-2 text-[12px]" onClick={() => setListTab('clips')}><Scissors size={15} aria-hidden="true" />คลิปของฉัน</button>
+                <button type="button" id="workspace-candidates-tab" role="tab" tabIndex={listTab === 'candidates' ? 0 : -1} aria-selected={listTab === 'candidates'} aria-controls="workspace-candidates-panel" className="sp-tab px-2 text-[12px]" onClick={() => setListTab('candidates')}><Sparkle size={15} aria-hidden="true" />AI แนะนำ</button>
+              </div></div>
+              <div className="sp-scroll-area sp-sidebar-body">
+                <div id="workspace-clips-panel" role="tabpanel" aria-labelledby="workspace-clips-tab" hidden={listTab !== 'clips'}><ClipStrip videoId={id} clips={clips} selectedClipId={selectedClipId} exportSel={exportSel} onSelect={selectClip} onToggleExport={toggleExport} /></div>
+                <div id="workspace-candidates-panel" role="tabpanel" aria-labelledby="workspace-candidates-tab" hidden={listTab !== 'candidates'}><CandidatePanel videoId={id} candidates={candidates} analysis={analysis} filters={candidateFilters} onFilters={setCandidateFilters} clips={clips as ClipRef[]} onSeek={seek} onAccepted={() => { refetchAll(); setListTab('clips') }} /></div>
+              </div>
+            </aside>
+            <div className="sp-preview-area">
               <MediaPlayer
                 ref={playerRef}
                 src={{ src: `${API_BASE}/videos/${id}/stream`, type: 'video/mp4' }}
@@ -389,7 +415,7 @@ export default function WorkspacePage() {
                 viewType="video"
                 playsInline
                 preload="metadata"
-                className="group relative flex-none aspect-video w-full overflow-hidden rounded-2xl bg-black"
+                className="sp-video-player group"
                 onTimeUpdate={({ currentTime: time }) => onVideoTimeUpdate(time)}
                 onSeeking={time => {
                   if (previewRange && !isTimeWithinPreviewRange(time, previewRange)) {
@@ -415,50 +441,26 @@ export default function WorkspacePage() {
                   <PreviewControls currentTime={currentTime} duration={duration} onSeek={setVideoTime} />
                 </div>
               </MediaPlayer>
-
+              <div className="sp-preview-caption"><span>{previewRange ? `คลิป ${fmtTime(previewRange.start)} – ${fmtTime(previewRange.end)}` : 'วิดีโอต้นฉบับ'}</span><span>{selectedClip ? `${(selectedClip.end - selectedClip.start).toFixed(1)} วินาที` : 'เลือกช่วงบน timeline เพื่อสร้างคลิป'}</span></div>
+            </div>
+            <div className="sp-timeline-area">
               <Timeline
                 duration={duration}
                 currentTime={currentTime}
                 candidates={candidates}
                 onSeek={seek}
                 onCreateRange={createRange}
+                selectedRange={selectedClip ? { start: selectedClip.start, end: selectedClip.end } : null}
               />
-
-              <ClipStrip
-                videoId={id}
-                clips={clips}
-                selectedClipId={selectedClipId}
-                exportSel={exportSel}
-                onSelect={selectClip}
-                onToggleExport={toggleExport}
-              />
-
-              <ExportBar
-                clips={clips}
-                exportSel={exportSel}
-                onExported={() => setExportsTick(t => t + 1)}
-              />
-
-              <ExportList videoId={id} clips={clips} refreshKey={exportsTick} />
             </div>
-
-            <div ref={editorPanelRef} className="w-full min-w-0 lg:w-[360px] lg:flex-none">
-              <div className="mb-3 flex gap-2 lg:hidden" aria-label="เลือกแผงเครื่องมือ">
-                <button type="button" aria-pressed={!selectedClip} onClick={() => requestNavigation(() => { setSelectedClipId(null); setPreviewRange(null) })} className="flex-1 rounded-lg border border-line3 px-3 py-2">ช่วงที่แนะนำ</button>
-                <button type="button" disabled={!selectedClip} aria-pressed={!!selectedClip} className="flex-1 rounded-lg border border-line3 px-3 py-2">แก้ไขคลิป</button>
+            <aside ref={editorPanelRef} className="sp-inspector sp-scroll-area" aria-label="เครื่องมือและการส่งออก"><div className="sp-inspector-content">
+              <div id="workspace-export-panel" hidden={!exportOpen} className="space-y-5">
+                <div className="flex items-center justify-between"><h2 className="sp-section-title">ส่งออกวิดีโอ</h2><button type="button" aria-label="ปิดตัวเลือกส่งออก" onClick={() => setExportOpen(false)} className="sp-button sp-button-quiet"><X size={17} aria-hidden="true" /></button></div>
+                <ExportBar clips={clips} exportSel={selectionForExport} onExported={() => setExportsTick(t => t + 1)} />
+                <ExportList videoId={id} clips={clips} refreshKey={exportsTick} />
               </div>
-            {selectedClipId === null || !selectedClip ? (
-              <CandidatePanel
-                videoId={id}
-                candidates={candidates}
-                analysis={analysis}
-                filters={candidateFilters}
-                onFilters={setCandidateFilters}
-                clips={clips as ClipRef[]}
-                onSeek={seek}
-                onAccepted={refetchAll}
-              />
-            ) : (
+              <div hidden={exportOpen}>
+            {!selectedClip ? <div className="sp-empty"><SlidersHorizontal size={32} aria-hidden="true" className="mx-auto mb-4 text-accent" /><h2 className="sp-section-title text-ink">เริ่มตัดคลิป</h2><p className="mt-3 text-[13px]">เลือกคลิปทางซ้ายเพื่อปรับเวลา จัดเฟรม และแก้คำบรรยาย</p><p className="mt-3 text-[12px]">ยังไม่มีคลิป? เลือกช่วงบน timeline แล้วกดสร้างคลิป</p></div> : (
               <ClipEditor
                 key={selectedClip.id}
                 clip={selectedClip}
@@ -466,6 +468,7 @@ export default function WorkspacePage() {
                 videoContainerRef={videoContainerRef}
                 videoWidth={video.width ?? 16}
                 videoHeight={video.height ?? 9}
+                active={!exportOpen}
                 onClose={() => { setSelectedClipId(null); setPreviewRange(null) }}
                 onUpdated={refetchAll}
                 onDeleted={() => {
@@ -479,7 +482,8 @@ export default function WorkspacePage() {
                 }}
               />
             )}
-            </div>
+              </div>
+            </div></aside>
           </div>
         )}
       </div>

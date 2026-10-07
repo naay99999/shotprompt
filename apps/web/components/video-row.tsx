@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { ArrowRight, CheckCircle, FilmSlate, WarningCircle } from '@phosphor-icons/react'
 import { useState } from 'react'
 import { describeError } from '@/lib/ui-error'
 import { api } from '@/lib/api'
@@ -32,19 +33,6 @@ const STEP_LABELS: Record<string, string> = {
   'detect-scenes': 'ตรวจจับฉาก',
   'detect-hooks': 'หาช่วงเด่น',
   thumbnails: 'สร้างภาพย่อ',
-}
-
-const GRADIENTS = [
-  'linear-gradient(135deg,#3a2c22,#241d18)',
-  'linear-gradient(135deg,#28302c,#1b201d)',
-  'linear-gradient(135deg,#33272b,#211a1c)',
-  'linear-gradient(135deg,#2f2b22,#1f1c17)',
-]
-
-function gradientFor(id: string) {
-  let h = 0
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
-  return GRADIENTS[h % GRADIENTS.length]
 }
 
 function fmtDate(ts: number) {
@@ -99,7 +87,6 @@ export function VideoRow({
     try {
       const { error } = await api.videos({ id: video.id }).retry.post({ model })
       if (error) {
-        const value = error.value as { message?: string } | undefined
         return describeError(error).message
       }
       onChanged?.()
@@ -112,31 +99,25 @@ export function VideoRow({
   }
 
   const inner = (
-    <div className="flex flex-wrap items-center gap-3 rounded-[13px] border border-line bg-surface px-4 py-3.5 transition-colors hover:border-line3 hover:bg-line2/30">
+    <div className="group grid min-w-0 grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 rounded-lg border border-transparent bg-surface px-4 py-4 transition-colors hover:border-line3 hover:bg-surface2 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto]">
+      <div data-motion-image aria-hidden="true" className="row-span-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded-md border border-line bg-bg text-dim sm:row-span-1">
+        <FilmSlate size={28} weight="light" className="transition-transform duration-300 group-hover:scale-110 motion-reduce:transition-none" />
+      </div>
+      <div className="col-span-2 min-w-0 sm:col-span-1">
+        <div title={video.filename} className="line-clamp-2 break-all text-[14px] font-medium leading-relaxed sm:truncate">{video.filename}</div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12px] leading-relaxed tabular-nums text-dim"><span>{meta}</span>{video.clipCount > 0 && <span className="text-muted">{video.clipCount} คลิป</span>}</div>
+      </div>
+      <div className="col-span-2 col-start-2 flex flex-wrap items-center gap-3 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:justify-end">
       <div
-        className="relative h-[54px] w-[88px] flex-none overflow-hidden rounded-lg"
-        style={{ background: gradientFor(video.id) }}
-      >
-        <div className="absolute right-[5px] bottom-[5px] rounded-[5px] bg-black/65 px-1.5 py-px font-mono text-[12px] text-[#c9c4bb]">
-          {video.duration ? fmtTime(video.duration) : '--:--:--'}
-        </div>
-      </div>
-      <div className="min-w-[120px] flex-1">
-        <div className="truncate text-[14.5px] font-semibold">{video.filename}</div>
-        <div className="mt-[3px] truncate text-[14px] text-dim">{meta}</div>
-      </div>
-      <div className="flex-none text-[14px] text-dim">
-        {video.clipCount > 0 ? `${video.clipCount} คลิป` : '—'}
-      </div>
-      <div
-        className={`flex flex-none items-center gap-[7px] rounded-full px-3 py-[5px] text-[14px] font-medium ${
-          isReady ? 'bg-ok/15 text-ok' : isFailed ? 'bg-err/15 text-err' : 'bg-line2 text-muted'
+        className={`flex items-center gap-2 text-[12px] font-medium ${
+          isReady ? 'text-ok' : isFailed ? 'text-err' : 'text-muted'
         }`}
       >
         {isProcessing && (
-          <span className="h-[11px] w-[11px] animate-spin rounded-full border-2 border-accent/30 border-t-accent" />
+          <span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-accent/30 border-t-accent motion-reduce:animate-none" />
         )}
-        {isReady && <span className="text-[12px]">✓</span>}
+        {isReady && <CheckCircle size={16} weight="fill" aria-hidden="true" />}
+        {isFailed && <WarningCircle size={16} aria-hidden="true" />}
         <span>{chipText}</span>
       </div>
       {isFailed && (
@@ -144,11 +125,13 @@ export function VideoRow({
           type="button"
           onClick={retry}
           disabled={retrying}
-          className="flex-none rounded-lg border border-line3 px-3.5 py-1.5 text-[14px] text-[#c9c4bb] transition-colors hover:border-[#4a4438] disabled:opacity-50"
+          className="sp-button sp-button-quiet text-[12px]"
         >
           {retrying ? '…' : 'ลองใหม่'}
         </button>
       )}
+      {!isFailed && <ArrowRight size={18} aria-hidden="true" className="hidden text-dim transition-transform group-hover:translate-x-1 motion-reduce:transition-none sm:block" />}
+      </div>
     </div>
   )
 
