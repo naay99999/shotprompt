@@ -9,7 +9,7 @@ import { checkSavedProfile } from '../ai/provider-check';
 
 function localOrigin(request: Request): boolean {
   const origin = request.headers.get('origin');
-  return origin === null || origin === 'http://127.0.0.1:3000' || origin === 'http://localhost:3000';
+  return origin === null || origin === 'http://127.0.0.1:3100' || origin === 'http://localhost:3100';
 }
 function rejectMutation(request: Request) {
   if (!localOrigin(request)) return status(403, { error: 'origin-not-allowed' });

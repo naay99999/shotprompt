@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-ShotPrompt is a single-user, local-first tool: ingest a long Thai/English live-commerce video, transcribe it with whisper.cpp, score "hook" moments (keyword tiers + scene detection), let the user turn candidates or hand-drawn time ranges into clips, edit trim/subtitles, and export with aspect conversion + loudness normalization. No auth, no cloud — server binds `127.0.0.1:3001`, web `127.0.0.1:3000` only. External binaries required on PATH: `ffmpeg`/`ffprobe` (must be a libass-enabled build — Homebrew's plain `ffmpeg` formula lacks it, use `ffmpeg-full`) and `whisper-cli`.
+ShotPrompt is a single-user, local-first tool: ingest a long Thai/English live-commerce video, transcribe it with whisper.cpp, score "hook" moments (keyword tiers + scene detection), let the user turn candidates or hand-drawn time ranges into clips, edit trim/subtitles, and export with aspect conversion + loudness normalization. No auth, no cloud — server binds `127.0.0.1:3101`, web `127.0.0.1:3100` only. External binaries required on PATH: `ffmpeg`/`ffprobe` (must be a libass-enabled build — Homebrew's plain `ffmpeg` formula lacks it, use `ffmpeg-full`) and `whisper-cli`.
 
 ## Commands
 
 ```bash
 bun install
-bun dev                 # server (Elysia, :3001) + web (Next.js, :3000) concurrently
+bun dev                 # server (Elysia, :3101) + web (Next.js, :3100) concurrently
 bun test packages apps/server            # all tests (bun:test; apps/web has none)
 bun test apps/server/test/clips.test.ts  # single file
 bun test -t "name"                       # filter by test name

@@ -7,7 +7,7 @@ ShotPrompt is a Bun workspace for a local-first Thai/English video clipping tool
 ## Build, Test, and Development Commands
 
 - `bun install` installs all workspace dependencies.
-- `bun dev` starts the server on `127.0.0.1:3001` and web app on `127.0.0.1:3000`.
+- `bun dev` starts the server on `127.0.0.1:3101` and web app on `127.0.0.1:3100`.
 - `bun test` runs the core, database, and server suites with `bun:test`.
 - `bun test apps/server/test/clips.test.ts` runs one test file; use `bun test -t "name"` to filter by test name.
 - `bun run typecheck` checks TypeScript across all packages and apps.

@@ -16,7 +16,7 @@ export function createApp(ctx: Ctx, systemRuntime?: SystemRuntime) {
   // resolve to the wrong path and 404. Safe to disable in all environments since it
   // only affects how the pathname is parsed, not routing correctness.
   return new Elysia({ handler: { standardHostname: false } })
-    .use(cors({ origin: ['http://127.0.0.1:3000', 'http://localhost:3000'] }))
+    .use(cors({ origin: ['http://127.0.0.1:3100', 'http://localhost:3100'] }))
     .use(systemRoutes(ctx.db, systemRuntime))
     .use(videoRoutes(ctx))
     .use(jobRoutes(ctx))

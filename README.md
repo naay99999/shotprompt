@@ -82,8 +82,8 @@ bun install
 bun dev
 ```
 
-This starts both the API server (`127.0.0.1:3001`) and the web app
-(`127.0.0.1:3000`) concurrently. Open `http://127.0.0.1:3000`.
+This starts both the API server (`127.0.0.1:3101`) and the web app
+(`127.0.0.1:3100`) concurrently. Open `http://127.0.0.1:3100`.
 
 ### First run
 

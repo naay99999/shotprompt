@@ -15,5 +15,5 @@ const ctx = createCtx(db)
 // Bun's default maxRequestBodySize (128 MiB) rejects multipart uploads of any real
 // live-commerce recording (often several hundred MB to a few GB) with a 413 before the
 // route handler ever runs — raise it well above what a single video upload needs.
-createApp(ctx).listen({ hostname: '127.0.0.1', port: 3001, maxRequestBodySize: 20 * 1024 * 1024 * 1024 })
-console.log('server on http://127.0.0.1:3001')
+createApp(ctx).listen({ hostname: '127.0.0.1', port: 3101, maxRequestBodySize: 20 * 1024 * 1024 * 1024 })
+console.log('server on http://127.0.0.1:3101')
